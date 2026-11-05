@@ -1,4 +1,0 @@
-﻿experimento,variável-alvo,unidade de análise,atributos de entrada candidatos
-Classificação multiclasse,"classe (aves, mamíferos, répteis, anfíbios)",registro individual,"x, y (ou célula), uc, ano, mês (cíclico), dia do ano, período climático, estação"
-Classificação binária,hotspot = 1 se nº de atropelamentos no segmento/célula de 500 m ≥ limiar,célula/segmento de 500 m,"posição do centro, uc, densidade na vizinhança (excluindo a própria célula), dados externos"
-Regressão,nº de atropelamentos,célula de 500 m × mês (ou × trimestre),"posição, uc, mês (cíclico), período climático, esforço (campanhas), histórico defasado"
