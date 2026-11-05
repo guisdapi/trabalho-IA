@@ -8,8 +8,8 @@ Uso:
     python etapa1_eda.py caminho/da/base.xlsx
 
 Saídas (pasta resultados_etapa1/):
-    resultados_etapa1.txt   tudo o que aparece no terminal
-    fig01 ... fig10 .png    gráficos
+    resultados_etapa1.md    relatório com texto, tabelas e gráficos
+    fig01 ... fig10 .png    gráficos (usados pelo .md)
 
 Itens do enunciado cobertos (na ordem das seções do terminal):
     1. Descrição do problema
@@ -24,6 +24,7 @@ Itens do enunciado cobertos (na ordem das seções do terminal):
 """
 
 import sys
+import textwrap
 from pathlib import Path
 
 import numpy as np
@@ -63,26 +64,85 @@ plt.rcParams.update({"savefig.dpi": 150, "savefig.bbox": "tight",
                      "axes.spines.top": False, "axes.spines.right": False,
                      "axes.titleweight": "bold"})
 
-# Tudo que é impresso também vai para resultados_etapa1.txt
-_linhas = []
+# Tudo que é impresso no terminal também vai para resultados_etapa1.md
+md = ["# Etapa 1 - Análise Exploratória do Dataset (RodoFauna / IBRAM-DF)", ""]
 
 
 def log(texto=""):
+    """Imprime uma linha e a adiciona ao .md (linhas recuadas viram itens de lista)."""
     print(texto)
-    _linhas.append(str(texto))
+    texto = str(texto)
+    if texto.startswith("   "):
+        md.append("- " + texto.strip())
+    elif texto == "":
+        md.append("")
+    else:
+        md.append(texto + "  ")  # dois espaços = quebra de linha no Markdown
+
+
+def paragrafo(texto):
+    """Texto corrido: quebrado em linhas no terminal, um parágrafo só no .md."""
+    print(textwrap.fill(texto, 78))
+    md.extend([texto, ""])
+
+
+def _fmt(v):
+    if pd.isna(v):
+        return "-"
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
+def tabela(obj, nome_valor="registros"):
+    """Imprime a tabela no terminal e a escreve como tabela Markdown no .md."""
+    if isinstance(obj, pd.Series):
+        obj = obj.rename(nome_valor).to_frame()
+    print(obj.to_string())
+    d = obj.reset_index()
+    d.columns = ["" if str(c) == "index" else str(c) for c in d.columns]
+    md.append("")
+    md.append("| " + " | ".join(d.columns) + " |")
+    md.append("|" + "---|" * len(d.columns))
+    for linha in d.itertuples(index=False):
+        md.append("| " + " | ".join(_fmt(v) for v in linha) + " |")
+    md.append("")
 
 
 def titulo(texto):
-    log()
-    log("=" * 78)
-    log(texto)
-    log("=" * 78)
+    print()
+    print("=" * 78)
+    print(texto.upper())
+    print("=" * 78)
+    md.extend(["", f"## {texto}", ""])
+
+
+def subtitulo(texto):
+    print()
+    print(texto)
+    md.extend(["", f"### {texto}", ""])
 
 
 def salvar(fig, nome):
     fig.savefig(SAIDA / nome)
     plt.close(fig)
-    log(f"   [figura salva: {nome}]")
+    print(f"   [figura salva: {nome}]")
+    legenda = LEGENDAS.get(nome, nome)
+    md.extend(["", f"![{legenda}]({nome})", f"*{legenda}*", ""])
+
+
+LEGENDAS = {
+    "fig01_ausentes.png": "Figura 1 - Percentual de valores ausentes/nao_identificado por atributo",
+    "fig02_boxplot_coordenadas.png": "Figura 2 - Boxplots das coordenadas x e y",
+    "fig03_distribuicao_classe.png": "Figura 3 - Distribuição da variável-alvo classe",
+    "fig04_top_especies.png": "Figura 4 - 15 espécies mais atropeladas",
+    "fig05_atropelamentos_por_celula.png": "Figura 5 - Atropelamentos por célula de 500 m",
+    "fig06_mapa_por_classe.png": "Figura 6 - Distribuição espacial por classe",
+    "fig07_densidade_espacial.png": "Figura 7 - Densidade espacial dos atropelamentos",
+    "fig08_serie_mensal.png": "Figura 8 - Série mensal de atropelamentos",
+    "fig09_mes_e_dia_semana.png": "Figura 9 - Atropelamentos por mês do ano e dia da semana",
+    "fig10_correlacoes.png": "Figura 10 - Correlação (Spearman) e associação (V de Cramér)",
+}
 
 
 problemas = []  # lista de problemas encontrados, impressa no final
@@ -91,18 +151,18 @@ problemas = []  # lista de problemas encontrados, impressa no final
 # ---------------------------------------------------------------------------
 # 1. Descrição do problema
 # ---------------------------------------------------------------------------
-titulo("1. DESCRIÇÃO DO PROBLEMA")
-log("Base do Projeto RodoFauna (IBRAM/DF): animais encontrados atropelados em")
-log("percursos sistemáticos nas rodovias do DF entre abr/2010 e mar/2015.")
-log("Cada linha é uma ocorrência (um animal), com data, classificação taxonômica,")
-log("unidade de conservação (uc) e coordenadas UTM (x, y).")
-log("Objetivo: prever o tipo (classe) e a intensidade/ocorrência de atropelamentos")
-log("de fauna SILVESTRE e identificar trechos críticos (hotspots).")
+titulo("1. Descrição do problema")
+paragrafo("Base do Projeto RodoFauna (IBRAM/DF): animais encontrados atropelados em "
+          "percursos sistemáticos nas rodovias do DF entre abr/2010 e mar/2015. "
+          "Cada linha é uma ocorrência (um animal), com data, classificação taxonômica, "
+          "unidade de conservação (uc) e coordenadas UTM (x, y).")
+paragrafo("Objetivo: prever o tipo (classe) e a intensidade/ocorrência de atropelamentos "
+          "de fauna SILVESTRE e identificar trechos críticos (hotspots).")
 
 # ---------------------------------------------------------------------------
 # 2. Registros, atributos e tipos
 # ---------------------------------------------------------------------------
-titulo("2. REGISTROS, ATRIBUTOS E TIPOS")
+titulo("2. Registros, atributos e tipos")
 
 bruto = pd.read_excel(ARQUIVO)
 bruto.columns = [c.strip().lower() for c in bruto.columns]
@@ -122,11 +182,11 @@ tipos = pd.DataFrame({
                           ("alvo" if c in ("classe", "especie_nm") else "sim")
                           for c in bruto.columns],
 })
-log(tipos.to_string())
+tabela(tipos)
 
 log()
 log("silvestre_ (base bruta):")
-log(bruto["silvestre_"].value_counts().to_string())
+tabela(bruto["silvestre_"].value_counts())
 
 # Filtra apenas fauna silvestre (exigência do enunciado)
 df = bruto[bruto["silvestre_"] == "silvestre"].copy()
@@ -160,7 +220,7 @@ log(f"Datas que não puderam ser convertidas: {df['data'].isna().sum()}")
 # ---------------------------------------------------------------------------
 # 3. Valores ausentes e 'nao_identificado'
 # ---------------------------------------------------------------------------
-titulo("3. VALORES AUSENTES E 'nao_identificado'")
+titulo("3. Valores ausentes e 'nao_identificado'")
 
 originais = [c for c in bruto.columns]
 ausentes = pd.DataFrame({
@@ -170,7 +230,7 @@ ausentes = pd.DataFrame({
 ausentes["%_sem_info"] = 100 * (ausentes["ausentes"] + ausentes["nao_identificado"]) / len(df)
 ausentes = ausentes.sort_values("%_sem_info", ascending=False)
 ausentes = ausentes[ausentes["%_sem_info"] > 0]
-log(ausentes.round(2).to_string() if len(ausentes) else "Nenhum valor ausente.")
+tabela(ausentes.round(2)) if len(ausentes) else log("Nenhum valor ausente.")
 
 fig, ax = plt.subplots(figsize=(8, 0.45 * len(ausentes) + 1.2))
 cores = [LARANJA if c in PROIBIDOS else AZUL for c in ausentes.index]
@@ -191,10 +251,12 @@ for c, v in ausentes["%_sem_info"].items():
 # ---------------------------------------------------------------------------
 # 4. Estatísticas descritivas e outliers
 # ---------------------------------------------------------------------------
-titulo("4. ESTATÍSTICAS DESCRITIVAS DAS VARIÁVEIS NUMÉRICAS")
+titulo("4. Estatísticas descritivas e outliers")
 
 numericas = ["x", "y", "ano", "mes_num", "dia_do_ano"]
-log(df[numericas].describe().round(2).to_string())
+desc = df[numericas].describe().T.round(2)
+desc.columns = ["n", "média", "desvio", "mín", "25%", "mediana", "75%", "máx"]
+tabela(desc)
 
 log()
 log("Outliers em x e y (critério de Tukey: fora de [Q1 - 1,5*IQR, Q3 + 1,5*IQR]):")
@@ -220,12 +282,12 @@ salvar(fig, "fig02_boxplot_coordenadas.png")
 # ---------------------------------------------------------------------------
 # 5. Variáveis-alvo e distribuição das classes
 # ---------------------------------------------------------------------------
-titulo("5. VARIÁVEIS-ALVO E DISTRIBUIÇÃO DAS CLASSES")
+titulo("5. Variáveis-alvo e distribuição das classes")
 
 # 5.1 Multiclasse: classe
-log("5.1 Classificação multiclasse -> alvo: 'classe'")
+subtitulo("5.1 Classificação multiclasse -> alvo: 'classe'")
 cont = df["classe"].value_counts()
-log(pd.DataFrame({"registros": cont, "%": (100 * cont / cont.sum()).round(2)}).to_string())
+tabela(pd.DataFrame({"registros": cont, "%": (100 * cont / cont.sum()).round(2)}))
 validas = cont.drop(NI, errors="ignore")
 razao = validas.max() / validas.min()
 log(f"Razão maior/menor classe: {razao:.1f} : 1")
@@ -248,8 +310,7 @@ ax.grid(axis="x", visible=False)
 salvar(fig, "fig03_distribuicao_classe.png")
 
 # 5.2 Espécie (alvo alternativo) - verifica classes com poucos exemplos
-log()
-log("5.2 Alvo alternativo 'especie_nm' (classes com poucos exemplos)")
+subtitulo("5.2 Alvo alternativo 'especie_nm' (classes com poucos exemplos)")
 esp = df.loc[df["especie_nm"] != NI, "especie_nm"].value_counts()
 log(f"Espécies distintas: {len(esp)} | registros sem espécie identificada: "
     f"{(df['especie_nm'] == NI).sum()}")
@@ -272,9 +333,9 @@ ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=v, label=NOME_CLASSE[k])
 salvar(fig, "fig04_top_especies.png")
 
 # 5.3 e 5.4 Alvos binário e de regressão (dependem de agregação espacial)
-log()
-log(f"5.3 Classificação binária -> alvo: hotspot (1/0) por célula de {TAM_CELULA} m")
-log(f"5.4 Regressão -> alvo: nº de atropelamentos por célula de {TAM_CELULA} m por mês")
+subtitulo(f"5.3 e 5.4 Alvos binário e de regressão (células de {TAM_CELULA} m)")
+log(f"Classificação binária -> alvo: hotspot (1/0) por célula de {TAM_CELULA} m")
+log(f"Regressão -> alvo: nº de atropelamentos por célula de {TAM_CELULA} m por mês")
 df["celula"] = ((df["x"] // TAM_CELULA).astype(int).astype(str) + "_" +
                 (df["y"] // TAM_CELULA).astype(int).astype(str))
 por_celula = df.groupby("celula").size()
@@ -305,13 +366,13 @@ salvar(fig, "fig05_atropelamentos_por_celula.png")
 # ---------------------------------------------------------------------------
 # 6. Distribuição espacial
 # ---------------------------------------------------------------------------
-titulo("6. DISTRIBUIÇÃO ESPACIAL")
+titulo("6. Distribuição espacial")
 
 log("Registros por unidade de conservação (uc):")
-log(df["uc"].value_counts().to_string())
+tabela(df["uc"].value_counts())
 log()
 log("10 células mais críticas:")
-log(por_celula.sort_values(ascending=False).head(10).to_string())
+tabela(por_celula.sort_values(ascending=False).head(10).rename_axis("célula (x_y)"))
 top10 = por_celula.sort_values(ascending=False).head(10).sum()
 log(f"-> concentram {top10 / len(df):.1%} dos atropelamentos em "
     f"{10 / len(por_celula):.1%} das células")
@@ -344,23 +405,23 @@ salvar(fig, "fig07_densidade_espacial.png")
 # ---------------------------------------------------------------------------
 # 7. Distribuição temporal
 # ---------------------------------------------------------------------------
-titulo("7. DISTRIBUIÇÃO TEMPORAL")
+titulo("7. Distribuição temporal")
 
 log(f"Período: {df['data'].min():%d/%m/%Y} a {df['data'].max():%d/%m/%Y}")
 log("(2010 começa em abril e 2015 termina em março: anos incompletos)")
 log()
 log("Registros por ano:")
-log(df["data"].dt.year.value_counts().sort_index().to_string())
+tabela(df["data"].dt.year.value_counts().sort_index().rename_axis("ano"))
 log()
 log("Registros por mês do ano:")
 por_mes = df["mes_num"].value_counts().reindex(range(1, 13), fill_value=0)
 por_mes.index = MESES
-log(por_mes.to_string())
+tabela(por_mes.rename_axis("mês"))
 log()
 log("Registros por dia da semana:")
 por_dia = df["dia_semana_num"].value_counts().reindex(range(7), fill_value=0)
 por_dia.index = DIAS
-log(por_dia.to_string())
+tabela(por_dia.rename_axis("dia"))
 if por_dia[["sab", "dom"]].sum() == 0:
     problemas.append("Nenhum registro em sábado/domingo: as coletas só ocorreram em dias úteis, "
                      "então 'dia_da_sem' reflete a agenda de coleta, não o risco.")
@@ -391,7 +452,7 @@ salvar(fig, "fig09_mes_e_dia_semana.png")
 # ---------------------------------------------------------------------------
 # 8. Redundância e correlação
 # ---------------------------------------------------------------------------
-titulo("8. ATRIBUTOS REDUNDANTES E CORRELAÇÃO")
+titulo("8. Atributos redundantes e correlação")
 
 # Campos que repetem a informação de data_dt
 log("Concordância dos campos originais com data_dt:")
@@ -420,7 +481,7 @@ log(f"Células de {TAM_CELULA} m com uma única uc: {(pureza == 1).mean():.1%} "
 corr = df[["x", "y", "ano", "mes_num", "dia_do_ano", "dia_semana_num"]].corr(method="spearman")
 log()
 log("Correlação de Spearman (numéricas):")
-log(corr.round(2).to_string())
+tabela(corr.round(2))
 
 
 # Associação entre categóricas (V de Cramér: 0 = nenhuma, 1 = total)
@@ -437,7 +498,7 @@ for a in categoricas:
         V.loc[a, b] = 1.0 if a == b else cramers_v(df[a].astype(str), df[b].astype(str))
 log()
 log("V de Cramér (categóricas):")
-log(V.round(2).to_string())
+tabela(V.round(2))
 
 fig, axs = plt.subplots(1, 2, figsize=(14, 5.5))
 fig.subplots_adjust(wspace=0.4)
@@ -459,9 +520,9 @@ if fortes:
 # ---------------------------------------------------------------------------
 # 9. Resumo dos problemas
 # ---------------------------------------------------------------------------
-titulo("9. RESUMO DOS PROBLEMAS ENCONTRADOS")
+titulo("9. Resumo dos problemas encontrados")
 for i, p in enumerate(problemas, 1):
     log(f"{i}. {p}")
 
-(SAIDA / "resultados_etapa1.txt").write_text("\n".join(_linhas), encoding="utf-8")
+(SAIDA / "resultados_etapa1.md").write_text("\n".join(md), encoding="utf-8")
 print(f"\nResultados salvos em: {SAIDA.resolve()}")
