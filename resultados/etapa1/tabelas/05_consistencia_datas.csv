@@ -1,0 +1,4 @@
+﻿atributo original,derivado de data_dt,% concordância,divergências
+ano,data_dt.year,100.0,0
+mes,data_dt.month,100.0,0
+dia_da_sem,data_dt.dayofweek,99.41083163380921,52

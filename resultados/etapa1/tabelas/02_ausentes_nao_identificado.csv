@@ -1,0 +1,21 @@
+﻿atributo,ausentes (NaN),nao_identificado,% ausente,% nao_ident.,% total sem info,uso permitido como preditor?
+sexo,0,8506,0.0,96.1781999095432,96.1781999095432,não (regra do enunciado)
+posicao,0,4656,0.0,52.64586160108548,52.64586160108548,não (regra do enunciado)
+hora,0,3326,0.0,37.607417458163724,37.607417458163724,não (regra do enunciado)
+especie_nm,0,2002,0.0,22.63681592039801,22.63681592039801,alvo
+familia,0,1684,0.0,19.041157847127998,19.041157847127998,não (regra do enunciado)
+ordem,0,342,0.0,3.8670284938941655,3.8670284938941655,não (regra do enunciado)
+nome_popul,0,156,0.0,1.7639077340569878,1.7639077340569878,não (regra do enunciado)
+uc,0,4,0.0,0.045228403437358664,0.045228403437358664,sim
+classe,0,2,0.0,0.022614201718679332,0.022614201718679332,alvo
+campanha,0,0,0.0,0.0,0.0,não (regra do enunciado)
+id,0,0,0.0,0.0,0.0,não (regra do enunciado)
+objectid,0,0,0.0,0.0,0.0,não (regra do enunciado)
+ano,0,0,0.0,0.0,0.0,sim
+silvestre_,0,0,0.0,0.0,0.0,não (regra do enunciado)
+data_dt,0,0,0.0,0.0,0.0,sim
+dia_da_sem,0,0,0.0,0.0,0.0,sim
+periodo,0,0,0.0,0.0,0.0,não (regra do enunciado)
+mes,0,0,0.0,0.0,0.0,não (regra do enunciado)
+x,0,0,0.0,0.0,0.0,sim
+y,0,0,0.0,0.0,0.0,sim

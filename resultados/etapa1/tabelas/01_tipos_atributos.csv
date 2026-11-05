@@ -1,0 +1,21 @@
+﻿atributo,tipo pandas,valores distintos,exemplo,natureza
+objectid,int64,10328,1,identificador
+id,int64,5164,1,identificador
+campanha,int64,482,1,numérico discreto (controle amostral)
+ano,int64,6,2010,numérico discreto / temporal
+periodo,int64,5,1,numérico discreto (controle amostral)
+mes,str,12,abril,categórico nominal
+data_dt,str,483,05/04/10,data
+dia_da_sem,str,6,seg,categórico nominal
+silvestre_,str,2,silvestre,categórico nominal
+classe,str,5,birds,categórico nominal
+ordem,str,34,apodiformes,categórico nominal
+familia,str,72,apodidae,categórico nominal
+especie_nm,str,192,streptoprocne_zonaris,categórico nominal
+nome_popul,str,176,andorinhao_de_coleira,categórico nominal
+uc,str,4,esecae,categórico nominal
+x,int64,4556,219467,numérico contínuo (coordenada UTM)
+y,int64,3858,8273815,numérico contínuo (coordenada UTM)
+posicao,str,11,nao_identificado,categórico nominal
+hora,str,476,nao_identificado,categórico nominal
+sexo,str,4,nao_identificado,categórico nominal
