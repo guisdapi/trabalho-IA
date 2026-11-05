@@ -9,28 +9,27 @@ Como executar (no terminal, dentro da pasta do projeto):
 
 O que o programa gera (dentro da pasta resultados_etapa1/):
     resultados_etapa1.md    relatório com texto, tabelas e gráficos
-    fig01 ... fig10 .png    gráficos (usados pelo relatório .md)
+    fig01 ... fig09 .png    gráficos (usados pelo relatório .md)
 
-Itens do enunciado cobertos, na ordem das seções:
+Seções (seguem a lista da Etapa 1 do enunciado):
     1. Descrição do problema
-    2. Quantidade de registros e de atributos, tipos dos atributos
-    3. Valores ausentes e 'nao_identificado'
-    4. Estatísticas descritivas das variáveis numéricas e outliers
-    5. Variável-alvo de cada experimento e distribuição das classes
-    6. Distribuição espacial
-    7. Distribuição temporal
-    8. Atributos redundantes e correlação
-    9. Resumo dos problemas encontrados
+    2. Quantidade de registros, quantidade de atributos e tipos dos atributos
+    3. Quantidade de valores ausentes (e de 'nao_identificado')
+    4. Variável-alvo de cada experimento e distribuição das classes
+    5. Estatísticas descritivas das variáveis numéricas e outliers
+    6. Distribuição espacial dos atropelamentos
+    7. Distribuição temporal dos atropelamentos
+    8. Atributos redundantes e correlação entre atributos
+    9. Resumo dos possíveis problemas encontrados
 """
 
 # =============================================================================
 # IMPORTAÇÃO DAS BIBLIOTECAS
 # =============================================================================
 import sys  # dá acesso aos argumentos digitados no terminal (sys.argv)
-import textwrap  # quebra textos longos em várias linhas para o terminal
 from pathlib import Path  # manipula caminhos de arquivos e pastas (funciona no Windows e no Linux)
 
-import numpy as np  # cálculos numéricos (raiz quadrada, condições vetorizadas etc.)
+import numpy as np  # cálculos numéricos (raiz quadrada)
 import pandas as pd  # leitura da planilha e manipulação de tabelas (DataFrames)
 import matplotlib  # biblioteca base de gráficos
 
@@ -52,13 +51,6 @@ PASTA_DE_SAIDA = Path("resultados_etapa1")  # pasta onde ficarão o relatório e
 PASTA_DE_SAIDA.mkdir(exist_ok=True)  # cria a pasta (se já existir, não dá erro)
 
 NAO_IDENTIFICADO = "nao_identificado"  # texto que a base usa quando a informação não foi registrada
-TAMANHO_DA_CELULA_EM_METROS = 500  # lado da célula espacial (quadrado de 500 m x 500 m)
-
-# Atributos que o enunciado proíbe de usar como entrada (preditores) dos modelos
-ATRIBUTOS_PROIBIDOS_COMO_PREDITORES = [
-    "objectid", "id", "silvestre_", "hora", "sexo", "posicao", "ordem",
-    "familia", "nome_popul", "campanha", "periodo", "mes",
-]
 
 # Cor fixa de cada classe taxonômica, para todos os gráficos usarem a mesma cor
 CORES_POR_CLASSE = {
@@ -78,7 +70,6 @@ NOMES_DOS_MESES = ["jan", "fev", "mar", "abr", "mai", "jun",
                    "jul", "ago", "set", "out", "nov", "dez"]  # rótulos do eixo dos meses
 NOMES_DOS_DIAS_DA_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]  # 0 = segunda ... 6 = domingo
 COR_AZUL = "#2a78d6"  # cor padrão das barras
-COR_LARANJA = "#eb6834"  # cor de destaque
 
 # Estilo visual padrão de todos os gráficos
 sns.set_theme(style="whitegrid")  # fundo branco com linhas de grade claras
@@ -96,7 +87,7 @@ plt.rcParams.update({
 # Lista com as linhas do relatório em Markdown; no final do programa vira o arquivo .md
 linhas_do_relatorio = ["# Etapa 1 - Análise Exploratória do Dataset (RodoFauna / IBRAM-DF)", ""]
 
-# Lista dos problemas encontrados ao longo da análise; é impressa na seção 9
+# Lista dos possíveis problemas encontrados ao longo da análise; é impressa na seção 9
 problemas_encontrados = []
 
 
@@ -110,12 +101,6 @@ def registrar(texto=""):
         linhas_do_relatorio.append("")  # ...separa parágrafos no .md
     else:  # linha comum
         linhas_do_relatorio.append(texto + "  ")  # dois espaços no fim = quebra de linha no Markdown
-
-
-def registrar_paragrafo(texto):
-    """Texto corrido: quebrado em várias linhas no terminal, um parágrafo só no .md."""
-    print(textwrap.fill(texto, 78))  # quebra o texto a cada 78 caracteres no terminal
-    linhas_do_relatorio.extend([texto, ""])  # no .md fica um parágrafo único seguido de linha vazia
 
 
 def formatar_valor(valor):
@@ -153,25 +138,17 @@ def registrar_titulo(texto):
     linhas_do_relatorio.extend(["", f"## {texto}", ""])  # '##' = título de nível 2 no Markdown
 
 
-def registrar_subtitulo(texto):
-    """Subtítulo: texto simples no terminal; '###' no .md."""
-    print()  # linha em branco antes
-    print(texto)  # subtítulo
-    linhas_do_relatorio.extend(["", f"### {texto}", ""])  # '###' = título de nível 3 no Markdown
-
-
 # Legenda de cada figura no relatório (nome do arquivo -> texto da legenda)
 LEGENDAS_DAS_FIGURAS = {
     "fig01_ausentes.png": "Figura 1 - Percentual de valores ausentes/nao_identificado por atributo",
-    "fig02_boxplot_coordenadas.png": "Figura 2 - Boxplots das coordenadas x e y",
-    "fig03_distribuicao_classe.png": "Figura 3 - Distribuição da variável-alvo classe",
-    "fig04_top_especies.png": "Figura 4 - 15 espécies mais atropeladas",
-    "fig05_atropelamentos_por_celula.png": "Figura 5 - Atropelamentos por célula de 500 m",
-    "fig06_mapa_por_classe.png": "Figura 6 - Distribuição espacial por classe",
-    "fig07_densidade_espacial.png": "Figura 7 - Densidade espacial dos atropelamentos",
-    "fig08_serie_mensal.png": "Figura 8 - Série mensal de atropelamentos",
-    "fig09_mes_e_dia_semana.png": "Figura 9 - Atropelamentos por mês do ano e dia da semana",
-    "fig10_correlacoes.png": "Figura 10 - Correlação (Spearman) e associação (V de Cramér)",
+    "fig02_distribuicao_classe.png": "Figura 2 - Distribuição da variável-alvo classe",
+    "fig03_top_especies.png": "Figura 3 - 15 espécies mais atropeladas",
+    "fig04_boxplot_coordenadas.png": "Figura 4 - Boxplots das coordenadas x e y",
+    "fig05_mapa_por_classe.png": "Figura 5 - Distribuição espacial por classe",
+    "fig06_densidade_espacial.png": "Figura 6 - Densidade espacial dos atropelamentos",
+    "fig07_serie_mensal.png": "Figura 7 - Série mensal de atropelamentos",
+    "fig08_mes_e_dia_semana.png": "Figura 8 - Atropelamentos por mês do ano e dia da semana",
+    "fig09_correlacoes.png": "Figura 9 - Correlação (Spearman) e associação (V de Cramér)",
 }
 
 
@@ -193,16 +170,12 @@ def salvar_figura(figura, nome_do_arquivo):
 # 1. DESCRIÇÃO DO PROBLEMA
 # =============================================================================
 registrar_titulo("1. Descrição do problema")
-registrar_paragrafo(
-    "Base do Projeto RodoFauna (IBRAM/DF): animais encontrados atropelados em "
-    "percursos sistemáticos nas rodovias do DF entre abr/2010 e mar/2015. "
-    "Cada linha é uma ocorrência (um animal), com data, classificação taxonômica, "
-    "unidade de conservação (uc) e coordenadas UTM (x, y)."
-)
-registrar_paragrafo(
-    "Objetivo: prever o tipo (classe) e a intensidade/ocorrência de atropelamentos "
-    "de fauna SILVESTRE e identificar trechos críticos (hotspots)."
-)
+registrar("Base do Projeto RodoFauna (IBRAM/DF): animais encontrados atropelados em percursos "
+          "sistemáticos nas rodovias do DF entre abr/2010 e mar/2015.")
+registrar("Cada linha é uma ocorrência (um animal), com data, classificação taxonômica, "
+          "unidade de conservação (uc) e coordenadas UTM (x, y).")
+registrar("Objetivo: prever o tipo e a intensidade/ocorrência de atropelamentos de fauna "
+          "SILVESTRE e identificar trechos críticos (hotspots).")
 
 # =============================================================================
 # 2. REGISTROS, ATRIBUTOS E TIPOS
@@ -220,54 +193,39 @@ for coluna in base_bruta.columns:  # percorre todas as colunas
 
 registrar(f"Arquivo: {CAMINHO_DO_ARQUIVO}")
 # len() = número de linhas (registros); shape[1] = número de colunas (atributos)
-registrar(f"Base bruta: {len(base_bruta)} registros x {base_bruta.shape[1]} atributos")
+registrar(f"Quantidade de registros: {len(base_bruta)}")
+registrar(f"Quantidade de atributos: {base_bruta.shape[1]}")
 registrar()
 registrar("Tipos dos atributos:")
-
-
-def classificar_uso_do_atributo(nome_do_atributo):
-    """Diz se o atributo pode ser preditor, se é alvo, ou se é proibido pelo enunciado."""
-    if nome_do_atributo in ATRIBUTOS_PROIBIDOS_COMO_PREDITORES:
-        return "não"  # proibido pelo enunciado
-    if nome_do_atributo in ("classe", "especie_nm"):
-        return "alvo"  # usado como variável-alvo
-    return "sim"  # pode ser usado como entrada
-
-
 tabela_de_tipos = pd.DataFrame({
     "tipo": base_bruta.dtypes.astype(str),  # tipo de dado de cada coluna (int64, string...)
     "valores_distintos": base_bruta.nunique(),  # quantos valores diferentes cada coluna tem
-    "pode_ser_preditor": [classificar_uso_do_atributo(coluna) for coluna in base_bruta.columns],
 })
 registrar_tabela(tabela_de_tipos)
 
 registrar()
-registrar("silvestre_ (base bruta):")
+registrar("Registros silvestres x domésticos:")
 registrar_tabela(base_bruta["silvestre_"].value_counts())  # quantos são silvestres x domésticos
 
-# Mantém só a fauna silvestre (exigência do enunciado); .copy() cria uma tabela independente
+# O enunciado pede para usar apenas fauna silvestre; .copy() cria uma tabela independente
 base_silvestre = base_bruta[base_bruta["silvestre_"] == "silvestre"].copy()
 registrar()
-registrar(f"Após filtrar silvestre_ == 'silvestre': {len(base_silvestre)} registros")
+registrar(f"Registros de fauna silvestre (usados no restante da análise): {len(base_silvestre)}")
 
 # Duplicatas: linhas com todas as colunas iguais, ignorando o objectid (que é só o nº da linha)
 colunas_sem_objectid = [coluna for coluna in base_silvestre.columns if coluna != "objectid"]
 quantidade_de_duplicatas = base_silvestre.duplicated(subset=colunas_sem_objectid).sum()
 registrar(f"Registros duplicados (todas as colunas iguais, exceto objectid): {quantidade_de_duplicatas}")
-if "id" in base_silvestre.columns:  # se a coluna id existe, mostra quantos ids diferentes há
-    registrar(f"Valores distintos de 'id' na base bruta: {base_bruta['id'].nunique()} "
-              f"(em {len(base_bruta)} linhas)")
 if quantidade_de_duplicatas > 0:  # se houver duplicatas...
-    percentual_de_duplicatas = quantidade_de_duplicatas / len(base_silvestre)
     problemas_encontrados.append(
-        f"{quantidade_de_duplicatas} registros silvestres duplicados ({percentual_de_duplicatas:.1%}). "
-        "Sem removê-los, todas as contagens ficam infladas."
+        f"Registros duplicados: {quantidade_de_duplicatas} "
+        f"({quantidade_de_duplicatas / len(base_silvestre):.1%} dos registros silvestres)."
     )
-    # ...remove as cópias, mantendo a primeira ocorrência de cada linha
+    # ...as cópias são retiradas desta análise, senão todas as contagens ficariam dobradas
     base_silvestre = base_silvestre.drop_duplicates(subset=colunas_sem_objectid)
-    registrar(f"-> Duplicatas removidas. Base analisada daqui em diante: {len(base_silvestre)} registros")
+    registrar(f"-> Sem as duplicatas, a análise segue com {len(base_silvestre)} registros")
 
-# Converte a coluna data_dt em data de verdade, para extrair mês, dia do ano etc.
+# Converte a coluna data_dt em data, para contar atropelamentos por ano, mês e dia da semana
 if pd.api.types.is_datetime64_any_dtype(base_silvestre["data_dt"]):  # o Excel já trouxe como data
     base_silvestre["data"] = base_silvestre["data_dt"]
 else:  # veio como texto no formato dia/mês/ano com 2 dígitos (ex.: 05/04/10)
@@ -276,17 +234,8 @@ else:  # veio como texto no formato dia/mês/ano com 2 dígitos (ex.: 05/04/10)
         format="%d/%m/%y",  # formato dd/mm/aa
         errors="coerce",  # datas inválidas viram NaT (data ausente) em vez de dar erro
     )
-# Atributos temporais derivados da data (usados nas seções 4, 7 e 8)
 base_silvestre["numero_do_mes"] = base_silvestre["data"].dt.month  # 1 = janeiro ... 12 = dezembro
-base_silvestre["dia_do_ano"] = base_silvestre["data"].dt.dayofyear  # 1 a 366
 base_silvestre["numero_do_dia_da_semana"] = base_silvestre["data"].dt.dayofweek  # 0 = segunda ... 6 = domingo
-# Período climático do DF: seco de maio a setembro, chuvoso de outubro a abril
-base_silvestre["periodo_climatico"] = np.where(
-    base_silvestre["numero_do_mes"].between(5, 9),  # condição: mês entre 5 e 9
-    "seco",  # valor se a condição for verdadeira
-    "chuvoso",  # valor se for falsa
-)
-registrar(f"Datas que não puderam ser convertidas: {base_silvestre['data'].isna().sum()}")
 
 # =============================================================================
 # 3. VALORES AUSENTES E 'nao_identificado'
@@ -311,11 +260,7 @@ else:
 
 # Gráfico de barras horizontais com o percentual sem informação de cada atributo
 figura, eixo = plt.subplots(figsize=(8, 0.45 * len(tabela_de_ausentes) + 1.2))  # altura cresce com o nº de barras
-cores_das_barras = [  # laranja = atributo proibido pelo enunciado; azul = permitido
-    COR_LARANJA if atributo in ATRIBUTOS_PROIBIDOS_COMO_PREDITORES else COR_AZUL
-    for atributo in tabela_de_ausentes.index
-]
-eixo.barh(tabela_de_ausentes.index, tabela_de_ausentes["percentual_sem_informacao"], color=cores_das_barras)
+eixo.barh(tabela_de_ausentes.index, tabela_de_ausentes["percentual_sem_informacao"], color=COR_AZUL)
 eixo.invert_yaxis()  # maior valor no topo
 for posicao, percentual in enumerate(tabela_de_ausentes["percentual_sem_informacao"]):
     eixo.text(percentual + 0.5, posicao, f"{percentual:.1f}%", va="center", fontsize=9)  # rótulo no fim da barra
@@ -324,65 +269,26 @@ eixo.set_xlabel("% dos registros silvestres (ausente + nao_identificado)")
 eixo.set_title("Atributos com informação faltante")
 salvar_figura(figura, "fig01_ausentes.png")
 
-# Registra como problema todo atributo com 30% ou mais de informação faltante
+# Considera "grande quantidade" quando 30% ou mais dos registros não têm a informação
 for atributo, percentual in tabela_de_ausentes["percentual_sem_informacao"].items():
     if percentual >= 30:
-        if atributo in ATRIBUTOS_PROIBIDOS_COMO_PREDITORES:
-            observacao = " (já excluído como preditor pelo enunciado)"
-        else:
-            observacao = ""
-        problemas_encontrados.append(f"'{atributo}' sem informação em {percentual:.0f}% dos registros{observacao}.")
+        problemas_encontrados.append(f"'{atributo}' sem informação em {percentual:.0f}% dos registros.")
 
 # =============================================================================
-# 4. ESTATÍSTICAS DESCRITIVAS E OUTLIERS
+# 4. VARIÁVEL-ALVO DE CADA EXPERIMENTO E DISTRIBUIÇÃO DAS CLASSES
 # =============================================================================
-registrar_titulo("4. Estatísticas descritivas e outliers")
+registrar_titulo("4. Variável-alvo de cada experimento e distribuição das classes")
 
-variaveis_numericas = ["x", "y", "ano", "numero_do_mes", "dia_do_ano"]
-# describe() calcula contagem, média, desvio-padrão, mínimo, quartis e máximo; .T vira a tabela de lado
-estatisticas_descritivas = base_silvestre[variaveis_numericas].describe().T.round(2)
-estatisticas_descritivas.columns = ["quantidade", "média", "desvio_padrão", "mínimo",
-                                    "1º_quartil", "mediana", "3º_quartil", "máximo"]
-registrar_tabela(estatisticas_descritivas)
-
+registrar("Variável-alvo de cada experimento:")
+registrar("   Classificação multiclasse: 'classe' (aves, mamíferos, répteis, anfíbios)")
+registrar("   Classificação binária: alto/baixo risco de atropelamento por segmento da rodovia")
+registrar("   Regressão: número de atropelamentos por segmento da rodovia (e por período)")
+registrar("Os alvos binário e de regressão não existem prontos na base: são construídos "
+          "agregando os registros por segmento, o que é feito nas próximas etapas.")
 registrar()
-registrar("Outliers em x e y (critério de Tukey: fora de [Q1 - 1,5*IQR, Q3 + 1,5*IQR]):")
-for coordenada in ["x", "y"]:
-    primeiro_quartil, terceiro_quartil = base_silvestre[coordenada].quantile([0.25, 0.75])  # Q1 e Q3
-    intervalo_interquartil = terceiro_quartil - primeiro_quartil  # IQR = Q3 - Q1
-    limite_inferior = primeiro_quartil - 1.5 * intervalo_interquartil  # abaixo disso é outlier
-    limite_superior = terceiro_quartil + 1.5 * intervalo_interquartil  # acima disso é outlier
-    quantidade_de_outliers = (
-        (base_silvestre[coordenada] < limite_inferior) | (base_silvestre[coordenada] > limite_superior)
-    ).sum()  # conta os registros fora dos limites
-    registrar(f"   {coordenada}: {quantidade_de_outliers} outliers")
 
-# Limites aproximados do DF em coordenadas UTM (fuso 23S), com folga de ~10 km
-x_dentro_do_df = base_silvestre["x"].between(135_000, 265_000)
-y_dentro_do_df = base_silvestre["y"].between(8_210_000, 8_300_000)
-fora_do_distrito_federal = ~(x_dentro_do_df & y_dentro_do_df)  # '~' inverte: True = fora do DF
-registrar(f"   Pontos fora dos limites do DF: {fora_do_distrito_federal.sum()}")
-if fora_do_distrito_federal.sum() > 0:
-    problemas_encontrados.append(
-        f"{fora_do_distrito_federal.sum()} pontos com coordenadas fora do DF (provável erro)."
-    )
-
-# Boxplots de x e y lado a lado: os pontos isolados fora dos "bigodes" são os outliers
-figura, eixos = plt.subplots(1, 2, figsize=(9, 3.5))  # 1 linha, 2 colunas de gráficos
-for eixo, coordenada in zip(eixos, ["x", "y"]):  # um boxplot em cada eixo
-    sns.boxplot(y=base_silvestre[coordenada], ax=eixo, color=COR_AZUL, width=0.4)
-    eixo.set_title(f"Boxplot de {coordenada} (UTM, m)")
-    eixo.set_ylabel("")
-    eixo.ticklabel_format(style="plain", axis="y")  # mostra números inteiros (sem notação científica)
-salvar_figura(figura, "fig02_boxplot_coordenadas.png")
-
-# =============================================================================
-# 5. VARIÁVEIS-ALVO E DISTRIBUIÇÃO DAS CLASSES
-# =============================================================================
-registrar_titulo("5. Variáveis-alvo e distribuição das classes")
-
-# ---- 5.1 Classificação multiclasse: alvo = classe ----
-registrar_subtitulo("5.1 Classificação multiclasse -> alvo: 'classe'")
+# ---- Distribuição das classes da variável 'classe' ----
+registrar("Distribuição da variável 'classe':")
 contagem_por_classe = base_silvestre["classe"].value_counts()  # registros de cada classe
 registrar_tabela(pd.DataFrame({
     "registros": contagem_por_classe,
@@ -391,20 +297,12 @@ registrar_tabela(pd.DataFrame({
 # Classes válidas = todas menos 'nao_identificado'
 classes_validas = contagem_por_classe.drop(NAO_IDENTIFICADO, errors="ignore")
 razao_de_desbalanceamento = classes_validas.max() / classes_validas.min()  # maior classe / menor classe
-classe_majoritaria = classes_validas.idxmax()  # nome da classe com mais registros
-proporcao_da_classe_majoritaria = classes_validas.max() / classes_validas.sum()
-registrar(f"Razão maior/menor classe: {razao_de_desbalanceamento:.1f} : 1")
-# Um "modelo" que sempre responde a classe majoritária já acerta essa proporção:
-registrar(f"Acurácia de quem sempre chuta '{classe_majoritaria}': {proporcao_da_classe_majoritaria:.1%}")
-if razao_de_desbalanceamento > 3:  # consideramos desbalanceado se a maior for 3x a menor
+registrar(f"Razão entre a maior e a menor classe: {razao_de_desbalanceamento:.1f} : 1")
+if razao_de_desbalanceamento > 3:  # consideramos desbalanceado se a maior for mais de 3x a menor
     problemas_encontrados.append(
-        f"'classe' desbalanceada ({razao_de_desbalanceamento:.1f}:1): '{classe_majoritaria}' tem "
-        f"{proporcao_da_classe_majoritaria:.0%} dos registros. Acurácia sozinha é enganosa."
-    )
-if NAO_IDENTIFICADO in contagem_por_classe.index:
-    problemas_encontrados.append(
-        f"{contagem_por_classe[NAO_IDENTIFICADO]} registro(s) com classe = nao_identificado "
-        "(remover do multiclasse)."
+        f"Classes desbalanceadas: '{classes_validas.idxmax()}' tem "
+        f"{classes_validas.max() / classes_validas.sum():.0%} dos registros e a maior classe é "
+        f"{razao_de_desbalanceamento:.1f} vezes a menor."
     )
 
 # Gráfico de barras da distribuição das classes
@@ -421,22 +319,22 @@ eixo.set_ylim(0, classes_validas.max() * 1.2)  # folga no topo para os rótulos
 eixo.set_ylabel("registros")
 eixo.set_title("Distribuição da variável-alvo 'classe'")
 eixo.grid(axis="x", visible=False)  # remove as linhas de grade verticais
-salvar_figura(figura, "fig03_distribuicao_classe.png")
+salvar_figura(figura, "fig02_distribuicao_classe.png")
 
-# ---- 5.2 Espécie como alvo alternativo: verifica classes com poucos exemplos ----
-registrar_subtitulo("5.2 Alvo alternativo 'especie_nm' (classes com poucos exemplos)")
+# ---- Espécies: verifica classes com quantidade insuficiente de exemplos ----
+registrar()
+registrar("Distribuição da variável 'especie_nm' (possível alvo alternativo):")
 especie_identificada = base_silvestre["especie_nm"] != NAO_IDENTIFICADO  # True = espécie conhecida
 contagem_por_especie = base_silvestre.loc[especie_identificada, "especie_nm"].value_counts()
-registrar(f"Espécies distintas: {len(contagem_por_especie)} | registros sem espécie identificada: "
-          f"{(~especie_identificada).sum()}")
+registrar(f"   espécies distintas: {len(contagem_por_especie)}")
 for minimo_de_registros in (10, 30, 100):  # quantas espécies têm pelo menos 10, 30 e 100 registros
-    registrar(f"   espécies com >= {minimo_de_registros:>3} registros: "
+    registrar(f"   espécies com pelo menos {minimo_de_registros} registros: "
               f"{(contagem_por_especie >= minimo_de_registros).sum()}")
-especies_raras = contagem_por_especie < 10  # True = espécie com menos de 10 registros
-registrar(f"   espécies com < 10 registros: {especies_raras.sum()} ({especies_raras.mean():.0%} das espécies)")
+especies_com_poucos_exemplos = contagem_por_especie < 10  # True = espécie com menos de 10 registros
+registrar(f"   espécies com menos de 10 registros: {especies_com_poucos_exemplos.sum()}")
 problemas_encontrados.append(
-    f"Espécies: {especies_raras.sum()} das {len(contagem_por_especie)} têm menos de 10 registros -> "
-    "classificar por espécie não é viável sem agrupar; por isso o multiclasse usa 'classe'."
+    f"Classes com poucos exemplos: {especies_com_poucos_exemplos.sum()} das {len(contagem_por_especie)} "
+    "espécies têm menos de 10 registros."
 )
 
 # 15 espécies mais frequentes, guardando também a classe de cada uma (para colorir as barras)
@@ -461,81 +359,68 @@ eixo.legend(  # legenda manual: um quadradinho colorido para cada classe
              for classe, cor in CORES_POR_CLASSE.items()],
     loc="lower right",
 )
-salvar_figura(figura, "fig04_top_especies.png")
-
-# ---- 5.3 e 5.4 Alvos binário e de regressão (precisam agregar os registros em células) ----
-registrar_subtitulo(f"5.3 e 5.4 Alvos binário e de regressão (células de {TAMANHO_DA_CELULA_EM_METROS} m)")
-registrar(f"Classificação binária -> alvo: hotspot (1/0) por célula de {TAMANHO_DA_CELULA_EM_METROS} m")
-registrar(f"Regressão -> alvo: nº de atropelamentos por célula de {TAMANHO_DA_CELULA_EM_METROS} m por mês")
-# Cada ponto recebe o código da célula de 500 m em que cai: divisão inteira (//) da coordenada por 500
-coluna_da_celula = (base_silvestre["x"] // TAMANHO_DA_CELULA_EM_METROS).astype(int).astype(str)
-linha_da_celula = (base_silvestre["y"] // TAMANHO_DA_CELULA_EM_METROS).astype(int).astype(str)
-base_silvestre["celula"] = coluna_da_celula + "_" + linha_da_celula  # ex.: "437_16547"
-atropelamentos_por_celula = base_silvestre.groupby("celula").size()  # registros em cada célula
-registrar(f"Células de {TAMANHO_DA_CELULA_EM_METROS} m com pelo menos 1 atropelamento: "
-          f"{len(atropelamentos_por_celula)}")
-registrar(f"Atropelamentos por célula: média = {atropelamentos_por_celula.mean():.1f}, "
-          f"mediana = {atropelamentos_por_celula.median():.1f}, "
-          f"máximo = {atropelamentos_por_celula.max()}")
-
-# Painel célula x mês: quantos pares (célula, mês) existem e quantos têm zero atropelamentos
-mes_de_cada_registro = base_silvestre["data"].dt.to_period("M")  # ex.: 2011-03
-quantidade_de_meses = mes_de_cada_registro.nunique()  # meses diferentes no período
-pares_celula_mes_com_registro = base_silvestre.groupby(["celula", mes_de_cada_registro]).size()
-total_de_pares_celula_mes = len(atropelamentos_por_celula) * quantidade_de_meses  # todas as combinações
-percentual_de_zeros = 1 - len(pares_celula_mes_com_registro) / total_de_pares_celula_mes
-registrar(f"Painel célula x mês: {len(atropelamentos_por_celula)} células x {quantidade_de_meses} meses = "
-          f"{total_de_pares_celula_mes} observações, {percentual_de_zeros:.0%} delas com zero atropelamentos")
-registrar("Obs.: a base só tem ocorrências; a classe 0 (sem/baixo risco) do problema binário")
-registrar("      precisa ser construída na Etapa 2 e justificada.")
-if percentual_de_zeros > 0.7:
-    problemas_encontrados.append(
-        f"Alvo de regressão célula x mês tem {percentual_de_zeros:.0%} de zeros "
-        "(muitos zeros; avaliar agregação maior, ex.: trimestre)."
-    )
-
-# Histograma: quantas células têm poucos e quantas têm muitos atropelamentos
-figura, eixo = plt.subplots(figsize=(7, 3.8))
-eixo.hist(atropelamentos_por_celula, bins=30, color=COR_AZUL, edgecolor="white")  # 30 faixas
-eixo.set_xlabel(f"atropelamentos na célula de {TAMANHO_DA_CELULA_EM_METROS} m (2010-2015)")
-eixo.set_ylabel("nº de células")
-eixo.set_title("Concentração dos atropelamentos por célula")
-salvar_figura(figura, "fig05_atropelamentos_por_celula.png")
+salvar_figura(figura, "fig03_top_especies.png")
 
 # =============================================================================
-# 6. DISTRIBUIÇÃO ESPACIAL
+# 5. ESTATÍSTICAS DESCRITIVAS DAS VARIÁVEIS NUMÉRICAS E OUTLIERS
 # =============================================================================
-registrar_titulo("6. Distribuição espacial")
+registrar_titulo("5. Estatísticas descritivas das variáveis numéricas")
+
+variaveis_numericas = ["x", "y", "ano"]  # atributos numéricos com significado (id e objectid são só códigos)
+# describe() calcula contagem, média, desvio-padrão, mínimo, quartis e máximo; .T vira a tabela de lado
+estatisticas_descritivas = base_silvestre[variaveis_numericas].describe().T.round(2)
+estatisticas_descritivas.columns = ["quantidade", "média", "desvio_padrão", "mínimo",
+                                    "1º_quartil", "mediana", "3º_quartil", "máximo"]
+registrar_tabela(estatisticas_descritivas)
+
+registrar()
+registrar("Outliers em x e y (critério de Tukey: fora de [Q1 - 1,5*IQR, Q3 + 1,5*IQR]):")
+for coordenada in ["x", "y"]:
+    primeiro_quartil, terceiro_quartil = base_silvestre[coordenada].quantile([0.25, 0.75])  # Q1 e Q3
+    intervalo_interquartil = terceiro_quartil - primeiro_quartil  # IQR = Q3 - Q1
+    limite_inferior = primeiro_quartil - 1.5 * intervalo_interquartil  # abaixo disso é outlier
+    limite_superior = terceiro_quartil + 1.5 * intervalo_interquartil  # acima disso é outlier
+    quantidade_de_outliers = (
+        (base_silvestre[coordenada] < limite_inferior) | (base_silvestre[coordenada] > limite_superior)
+    ).sum()  # conta os registros fora dos limites
+    registrar(f"   {coordenada}: {quantidade_de_outliers} outliers")
+    if quantidade_de_outliers > 0:
+        problemas_encontrados.append(f"{quantidade_de_outliers} outliers na coordenada {coordenada}.")
+
+# Boxplots de x e y lado a lado: os pontos isolados fora dos "bigodes" são os outliers
+figura, eixos = plt.subplots(1, 2, figsize=(9, 3.5))  # 1 linha, 2 colunas de gráficos
+for eixo, coordenada in zip(eixos, ["x", "y"]):  # um boxplot em cada eixo
+    sns.boxplot(y=base_silvestre[coordenada], ax=eixo, color=COR_AZUL, width=0.4)
+    eixo.set_title(f"Boxplot de {coordenada} (UTM, m)")
+    eixo.set_ylabel("")
+    eixo.ticklabel_format(style="plain", axis="y")  # mostra números inteiros (sem notação científica)
+salvar_figura(figura, "fig04_boxplot_coordenadas.png")
+
+# =============================================================================
+# 6. DISTRIBUIÇÃO ESPACIAL DOS ATROPELAMENTOS
+# =============================================================================
+registrar_titulo("6. Distribuição espacial dos atropelamentos")
 
 registrar("Registros por unidade de conservação (uc):")
 registrar_tabela(base_silvestre["uc"].value_counts())
-registrar()
-registrar("10 células mais críticas:")
-dez_celulas_mais_criticas = atropelamentos_por_celula.sort_values(ascending=False).head(10)
-registrar_tabela(dez_celulas_mais_criticas.rename_axis("célula (x_y)"))
-registrar(f"-> concentram {dez_celulas_mais_criticas.sum() / len(base_silvestre):.1%} dos atropelamentos em "
-          f"{10 / len(atropelamentos_por_celula):.1%} das células")
-
-# Base usada nos mapas: sem os pontos fora do DF, para não distorcer a escala
-base_para_mapas = base_silvestre[~fora_do_distrito_federal]
-classes_no_grafico = [classe for classe in CORES_POR_CLASSE if classe in classes_validas.index]
 
 # Um mapa para cada classe (grade 2 x 2); em cinza ficam todas as ocorrências como referência
+classes_no_grafico = [classe for classe in CORES_POR_CLASSE if classe in classes_validas.index]
 figura, eixos = plt.subplots(2, 2, figsize=(11, 8), sharex=True, sharey=True)  # mesma escala nos 4
 for eixo, classe in zip(eixos.ravel(), classes_no_grafico):  # ravel() transforma a grade 2x2 em lista
-    eixo.scatter(base_para_mapas["x"], base_para_mapas["y"], s=3, color="#dddddd")  # todas em cinza
-    registros_da_classe = base_para_mapas[base_para_mapas["classe"] == classe]
+    eixo.scatter(base_silvestre["x"], base_silvestre["y"], s=3, color="#dddddd")  # todas em cinza
+    registros_da_classe = base_silvestre[base_silvestre["classe"] == classe]
     eixo.scatter(registros_da_classe["x"], registros_da_classe["y"], s=6, color=CORES_POR_CLASSE[classe])
     eixo.set_title(f"{NOME_DA_CLASSE_EM_PORTUGUES[classe]} (n = {len(registros_da_classe)})")
     eixo.set_aspect("equal")  # 1 metro em x = 1 metro em y (mapa sem distorção)
     eixo.ticklabel_format(style="plain")  # coordenadas sem notação científica
     eixo.tick_params(labelsize=7)  # números dos eixos menores
 figura.suptitle("Ocorrências por classe (cinza = todas)", fontweight="bold")
-salvar_figura(figura, "fig06_mapa_por_classe.png")
+salvar_figura(figura, "fig05_mapa_por_classe.png")
 
 # Mapa de densidade: hexágonos mais escuros = mais atropelamentos naquela área
 figura, eixo = plt.subplots(figsize=(8, 6))
-hexagonos = eixo.hexbin(base_para_mapas["x"], base_para_mapas["y"],
+hexagonos = eixo.hexbin(base_silvestre["x"], base_silvestre["y"],
                         gridsize=50,  # 50 hexágonos na largura
                         cmap="Blues",  # escala de azul
                         mincnt=1)  # só desenha hexágonos com pelo menos 1 registro
@@ -546,12 +431,12 @@ eixo.tick_params(axis="x", rotation=30)  # gira os números do eixo x para não 
 eixo.set_xlabel("x (UTM)")
 eixo.set_ylabel("y (UTM)")
 eixo.set_title("Densidade espacial dos atropelamentos")
-salvar_figura(figura, "fig07_densidade_espacial.png")
+salvar_figura(figura, "fig06_densidade_espacial.png")
 
 # =============================================================================
-# 7. DISTRIBUIÇÃO TEMPORAL
+# 7. DISTRIBUIÇÃO TEMPORAL DOS ATROPELAMENTOS
 # =============================================================================
-registrar_titulo("7. Distribuição temporal")
+registrar_titulo("7. Distribuição temporal dos atropelamentos")
 
 registrar(f"Período: {base_silvestre['data'].min():%d/%m/%Y} a {base_silvestre['data'].max():%d/%m/%Y}")
 registrar("(2010 começa em abril e 2015 termina em março: anos incompletos)")
@@ -571,86 +456,64 @@ atropelamentos_por_dia_da_semana = (
 )
 atropelamentos_por_dia_da_semana.index = NOMES_DOS_DIAS_DA_SEMANA  # troca 0..6 por seg..dom
 registrar_tabela(atropelamentos_por_dia_da_semana.rename_axis("dia"))
-if atropelamentos_por_dia_da_semana[["sab", "dom"]].sum() == 0:  # nenhum registro no fim de semana
-    problemas_encontrados.append(
-        "Nenhum registro em sábado/domingo: as coletas só ocorreram em dias úteis, "
-        "então 'dia_da_sem' reflete a agenda de coleta, não o risco."
-    )
-registrar()
-registrar("Período climático (seco = mai-set, chuvoso = out-abr):")
-contagem_por_periodo_climatico = base_silvestre["periodo_climatico"].value_counts()
-registros_no_chuvoso = contagem_por_periodo_climatico.get("chuvoso", 0)
-registros_no_seco = contagem_por_periodo_climatico.get("seco", 0)
-# Divide pelo nº de meses de cada período (7 chuvosos e 5 secos) para comparar de forma justa
-registrar(f"   chuvoso: {registros_no_chuvoso} ({registros_no_chuvoso / 7:.0f} por mês)")
-registrar(f"   seco:    {registros_no_seco} ({registros_no_seco / 5:.0f} por mês)")
 
 # Série temporal: total de atropelamentos em cada mês do período
+mes_de_cada_registro = base_silvestre["data"].dt.to_period("M")  # ex.: 2011-03
 serie_mensal = base_silvestre.groupby(mes_de_cada_registro).size()
 figura, eixo = plt.subplots(figsize=(11, 3.8))
 eixo.plot(serie_mensal.index.to_timestamp(), serie_mensal.values, color=COR_AZUL, marker="o", markersize=3)
 eixo.set_ylabel("registros")
 eixo.set_title("Atropelamentos por mês (abr/2010 - mar/2015)")
-salvar_figura(figura, "fig08_serie_mensal.png")
+salvar_figura(figura, "fig07_serie_mensal.png")
 
 # Dois gráficos de barras lado a lado: por mês do ano e por dia da semana
 figura, eixos = plt.subplots(1, 2, figsize=(12, 3.8), gridspec_kw={"width_ratios": [2, 1]})  # esquerdo 2x mais largo
-eixos[0].bar(NOMES_DOS_MESES, atropelamentos_por_mes.values,
-             color=[COR_LARANJA if 5 <= mes <= 9 else COR_AZUL for mes in range(1, 13)])  # laranja = seca
-eixos[0].set_title("Por mês do ano (laranja = estação seca)")
+eixos[0].bar(NOMES_DOS_MESES, atropelamentos_por_mes.values, color=COR_AZUL)
+eixos[0].set_title("Por mês do ano")
 eixos[0].set_ylabel("registros")
 eixos[1].bar(NOMES_DOS_DIAS_DA_SEMANA, atropelamentos_por_dia_da_semana.values, color=COR_AZUL)
 eixos[1].set_title("Por dia da semana")
 for eixo in eixos:
     eixo.grid(axis="x", visible=False)  # remove as linhas de grade verticais
-salvar_figura(figura, "fig09_mes_e_dia_semana.png")
+salvar_figura(figura, "fig08_mes_e_dia_semana.png")
 
 # =============================================================================
-# 8. ATRIBUTOS REDUNDANTES E CORRELAÇÃO
+# 8. ATRIBUTOS REDUNDANTES E CORRELAÇÃO ENTRE ATRIBUTOS
 # =============================================================================
-registrar_titulo("8. Atributos redundantes e correlação")
+registrar_titulo("8. Atributos redundantes e correlação entre atributos")
 
-# ---- Campos originais que repetem a informação de data_dt ----
-registrar("Concordância dos campos originais com data_dt:")
-concordancia_do_ano = (base_silvestre["ano"] == base_silvestre["data"].dt.year).mean()  # % de linhas iguais
-registrar(f"   ano        x data_dt: {concordancia_do_ano:.1%}")
+# ---- Atributos redundantes: ano, mes e dia_da_sem repetem a informação de data_dt ----
+registrar("Atributos que repetem a informação de data_dt:")
+ano_igual_ao_da_data = base_silvestre["ano"] == base_silvestre["data"].dt.year  # True = mesmo ano
+registrar(f"   ano igual ao ano de data_dt em {ano_igual_ao_da_data.mean():.1%} dos registros")
 # Converte 'seg', 'ter'... da coluna original em 0, 1... para comparar com o dia calculado pela data
 numero_do_dia_por_nome = {nome: numero for numero, nome in enumerate(NOMES_DOS_DIAS_DA_SEMANA)}
 dia_da_semana_original = base_silvestre["dia_da_sem"].str[:3].map(numero_do_dia_por_nome)
 dia_igual_ao_da_data = dia_da_semana_original == base_silvestre["numero_do_dia_da_semana"]
-registrar(f"   dia_da_sem x data_dt: {dia_igual_ao_da_data.mean():.1%}  "
+registrar(f"   dia_da_sem igual ao dia de data_dt em {dia_igual_ao_da_data.mean():.1%} dos registros "
           f"({(~dia_igual_ao_da_data).sum()} divergências)")
-registrar(f"   valores de dia_da_sem: {base_silvestre['dia_da_sem'].value_counts().to_dict()}")
-registrar("-> ano, mes e dia_da_sem são deriváveis de data_dt (redundantes).")
-if dia_igual_ao_da_data.mean() < 1:  # se houver qualquer divergência
+problemas_encontrados.append("Atributos redundantes: 'ano', 'mes' e 'dia_da_sem' repetem a informação de 'data_dt'.")
+if (~dia_igual_ao_da_data).sum() > 0:  # se houver qualquer divergência
     problemas_encontrados.append(
-        f"'dia_da_sem' diverge da data em {(~dia_igual_ao_da_data).sum()} registros "
-        "(erro de digitação) - derivar o dia da semana de data_dt."
+        f"'dia_da_sem' não confere com 'data_dt' em {(~dia_igual_ao_da_data).sum()} registros."
     )
 
-# ---- Hierarquia taxonômica: a espécie determina a classe ----
-# Se cada espécie tem uma única classe, usar espécie (ou ordem/família) como entrada seria "colar" a resposta
+# ---- Atributos redundantes: hierarquia taxonômica (espécie -> família -> ordem -> classe) ----
 registros_com_especie_e_classe = base_silvestre[
     (base_silvestre["especie_nm"] != NAO_IDENTIFICADO) & (base_silvestre["classe"] != NAO_IDENTIFICADO)
 ]
 classes_por_especie = registros_com_especie_e_classe.groupby("especie_nm")["classe"].nunique()
-registrar(f"Espécies associadas a mais de uma classe: {(classes_por_especie > 1).sum()} "
-          "-> especie_nm/ordem/familia determinam a classe (não podem ser entrada).")
-
-
-# ---- uc é praticamente definida pela posição (x, y) ----
-def proporcao_da_uc_mais_comum(ucs_da_celula):
-    """Fração dos registros da célula que pertencem à uc mais comum dela (1.0 = célula com uma única uc)."""
-    return ucs_da_celula.value_counts(normalize=True).iloc[0]
-
-
-pureza_da_uc_por_celula = base_silvestre.groupby("celula")["uc"].agg(proporcao_da_uc_mais_comum)
-registrar(f"Células de {TAMANHO_DA_CELULA_EM_METROS} m com uma única uc: "
-          f"{(pureza_da_uc_por_celula == 1).mean():.1%} -> uc é quase redundante com (x, y).")
+registrar()
+registrar("Hierarquia taxonômica (espécie -> família -> ordem -> classe):")
+registrar(f"   espécies associadas a mais de uma classe: {(classes_por_especie > 1).sum()}")
+if (classes_por_especie > 1).sum() == 0:  # cada espécie pertence a uma única classe
+    problemas_encontrados.append(
+        "Atributos redundantes: 'especie_nm', 'nome_popul', 'familia' e 'ordem' determinam a 'classe'."
+    )
 
 # ---- Correlação de Spearman entre variáveis numéricas ----
 # Spearman mede se duas variáveis crescem juntas (+1), em sentidos opostos (-1) ou não se relacionam (0)
-variaveis_para_correlacao = ["x", "y", "ano", "numero_do_mes", "dia_do_ano", "numero_do_dia_da_semana"]
+variaveis_para_correlacao = ["x", "y", "ano", "numero_do_mes", "numero_do_dia_da_semana"]
 matriz_de_correlacao = base_silvestre[variaveis_para_correlacao].corr(method="spearman")
 registrar()
 registrar("Correlação de Spearman (numéricas):")
@@ -667,7 +530,7 @@ def calcular_v_de_cramer(variavel_a, variavel_b):
     return np.sqrt(estatistica_qui_quadrado / (total_de_registros * menor_dimensao))  # fórmula do V de Cramér
 
 
-variaveis_categoricas = ["classe", "uc", "periodo_climatico", "ano", "numero_do_mes"]
+variaveis_categoricas = ["classe", "uc", "ano", "mes", "dia_da_sem"]  # atributos originais da base
 matriz_v_de_cramer = pd.DataFrame(index=variaveis_categoricas, columns=variaveis_categoricas, dtype=float)
 for variavel_linha in variaveis_categoricas:  # calcula o V para cada par de variáveis
     for variavel_coluna in variaveis_categoricas:
@@ -689,33 +552,31 @@ sns.heatmap(matriz_de_correlacao, annot=True, fmt=".2f",  # annot = escreve o va
 eixos[0].set_title("Spearman (numéricas)")
 sns.heatmap(matriz_v_de_cramer, annot=True, fmt=".2f", cmap="Blues", vmin=0, vmax=1, ax=eixos[1])
 eixos[1].set_title("V de Cramér (categóricas)")
-salvar_figura(figura, "fig10_correlacoes.png")
+salvar_figura(figura, "fig09_correlacoes.png")
 
-# Lista os pares com associação forte (>= 0,7), olhando só a metade de cima de cada matriz
-pares_fortemente_associados = []
+# Lista os pares com associação elevada (>= 0,7), olhando só a metade de cima de cada matriz
+pares_com_associacao_elevada = []
 for posicao, variavel_a in enumerate(variaveis_para_correlacao):
     for variavel_b in variaveis_para_correlacao[posicao + 1:]:  # só pares ainda não vistos
         valor = matriz_de_correlacao.loc[variavel_a, variavel_b]
         if abs(valor) >= 0.7:  # abs = valor absoluto (vale para correlação positiva ou negativa)
-            pares_fortemente_associados.append((variavel_a, variavel_b, valor))
+            pares_com_associacao_elevada.append((variavel_a, variavel_b, valor))
 for posicao, variavel_a in enumerate(variaveis_categoricas):
     for variavel_b in variaveis_categoricas[posicao + 1:]:
         valor = matriz_v_de_cramer.loc[variavel_a, variavel_b]
         if valor >= 0.7:
-            pares_fortemente_associados.append((variavel_a, variavel_b, valor))
-if pares_fortemente_associados:
+            pares_com_associacao_elevada.append((variavel_a, variavel_b, valor))
+if pares_com_associacao_elevada:
     descricao_dos_pares = "; ".join(
         f"{variavel_a} x {variavel_b} ({valor:.2f})"
-        for variavel_a, variavel_b, valor in pares_fortemente_associados
+        for variavel_a, variavel_b, valor in pares_com_associacao_elevada
     )
-    problemas_encontrados.append(
-        f"Pares fortemente associados (>= 0,7): {descricao_dos_pares} -> manter só um de cada par."
-    )
+    problemas_encontrados.append(f"Correlação elevada (>= 0,7) entre: {descricao_dos_pares}.")
 
 # =============================================================================
-# 9. RESUMO DOS PROBLEMAS ENCONTRADOS
+# 9. RESUMO DOS POSSÍVEIS PROBLEMAS ENCONTRADOS
 # =============================================================================
-registrar_titulo("9. Resumo dos problemas encontrados")
+registrar_titulo("9. Resumo dos possíveis problemas encontrados")
 for numero, problema in enumerate(problemas_encontrados, start=1):  # numera a partir de 1
     registrar(f"{numero}. {problema}")
 
