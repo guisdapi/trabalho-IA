@@ -9,7 +9,7 @@ Como executar (no terminal, dentro da pasta do projeto):
 
 O que o programa gera (dentro da pasta resultados_etapa1/):
     resultados_etapa1.md    relatório com texto, tabelas e gráficos
-    fig01 ... fig09 .png    gráficos (usados pelo relatório .md)
+    fig01 ... fig08 .png    gráficos (usados pelo relatório .md)
 
 Seções (seguem a lista da Etapa 1 do enunciado):
     1. Descrição do problema
@@ -29,14 +29,12 @@ Seções (seguem a lista da Etapa 1 do enunciado):
 import sys  # dá acesso aos argumentos digitados no terminal (sys.argv)
 from pathlib import Path  # manipula caminhos de arquivos e pastas (funciona no Windows e no Linux)
 
-import numpy as np  # cálculos numéricos (raiz quadrada)
 import pandas as pd  # leitura da planilha e manipulação de tabelas (DataFrames)
 import matplotlib  # biblioteca base de gráficos
 
 matplotlib.use("Agg")  # faz os gráficos serem salvos em arquivo, sem abrir janelas na tela
 import matplotlib.pyplot as plt  # interface para criar figuras e eixos dos gráficos
 import seaborn as sns  # gráficos estatísticos prontos (boxplot, mapa de calor)
-from scipy.stats import chi2_contingency  # teste qui-quadrado, usado no cálculo do V de Cramér
 
 # =============================================================================
 # CONFIGURAÇÕES GERAIS
@@ -68,7 +66,6 @@ NOME_DA_CLASSE_EM_PORTUGUES = {
 }
 NOMES_DOS_MESES = ["jan", "fev", "mar", "abr", "mai", "jun",
                    "jul", "ago", "set", "out", "nov", "dez"]  # rótulos do eixo dos meses
-NOMES_DOS_DIAS_DA_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]  # 0 = segunda ... 6 = domingo
 COR_AZUL = "#2a78d6"  # cor padrão das barras
 
 # Estilo visual padrão de todos os gráficos
@@ -82,19 +79,17 @@ plt.rcParams.update({
 })
 
 # =============================================================================
-# FUNÇÕES AUXILIARES (escrevem no terminal e no relatório .md ao mesmo tempo)
+# FUNÇÕES AUXILIARES (montam o relatório .md)
 # =============================================================================
 # Lista com as linhas do relatório em Markdown; no final do programa vira o arquivo .md
 linhas_do_relatorio = ["# Etapa 1 - Análise Exploratória do Dataset (RodoFauna / IBRAM-DF)", ""]
 
-# Lista dos possíveis problemas encontrados ao longo da análise; é impressa na seção 9
+# Lista dos possíveis problemas encontrados ao longo da análise; é escrita na seção 9
 problemas_encontrados = []
 
 
 def registrar(texto=""):
-    """Mostra uma linha no terminal e a adiciona ao relatório .md."""
-    print(texto)  # mostra no terminal
-    texto = str(texto)  # garante que é texto (caso venha um número)
+    """Adiciona uma linha de texto ao relatório .md."""
     if texto.startswith("   "):  # linhas que começam com 3 espaços são sub-itens...
         linhas_do_relatorio.append("- " + texto.strip())  # ...e viram itens de lista no .md
     elif texto == "":  # linha vazia...
@@ -113,10 +108,9 @@ def formatar_valor(valor):
 
 
 def registrar_tabela(tabela, nome_da_coluna_de_valores="registros"):
-    """Mostra uma tabela no terminal e a escreve como tabela Markdown no .md."""
+    """Escreve uma tabela do pandas como tabela Markdown no .md."""
     if isinstance(tabela, pd.Series):  # se for uma série (uma coluna só)...
         tabela = tabela.rename(nome_da_coluna_de_valores).to_frame()  # ...vira tabela com nome na coluna
-    print(tabela.to_string())  # mostra a tabela completa no terminal
     tabela_com_indice = tabela.reset_index()  # transforma o índice (rótulos das linhas) em coluna
     tabela_com_indice.columns = [  # nomes das colunas como texto; o índice sem nome fica em branco
         "" if str(coluna) == "index" else str(coluna) for coluna in tabela_com_indice.columns
@@ -130,25 +124,20 @@ def registrar_tabela(tabela, nome_da_coluna_de_valores="registros"):
 
 
 def registrar_titulo(texto):
-    """Título de seção: em maiúsculas entre linhas de '=' no terminal; '##' no .md."""
-    print()  # linha em branco antes
-    print("=" * 78)  # linha de separação
-    print(texto.upper())  # título em maiúsculas
-    print("=" * 78)  # linha de separação
-    linhas_do_relatorio.extend(["", f"## {texto}", ""])  # '##' = título de nível 2 no Markdown
+    """Adiciona um título de seção ao .md ('##' = título de nível 2 no Markdown)."""
+    linhas_do_relatorio.extend(["", f"## {texto}", ""])
 
 
 # Legenda de cada figura no relatório (nome do arquivo -> texto da legenda)
 LEGENDAS_DAS_FIGURAS = {
     "fig01_ausentes.png": "Figura 1 - Percentual de valores ausentes/nao_identificado por atributo",
     "fig02_distribuicao_classe.png": "Figura 2 - Distribuição da variável-alvo classe",
-    "fig03_top_especies.png": "Figura 3 - 15 espécies mais atropeladas",
-    "fig04_boxplot_coordenadas.png": "Figura 4 - Boxplots das coordenadas x e y",
-    "fig05_mapa_por_classe.png": "Figura 5 - Distribuição espacial por classe",
-    "fig06_densidade_espacial.png": "Figura 6 - Densidade espacial dos atropelamentos",
-    "fig07_serie_mensal.png": "Figura 7 - Série mensal de atropelamentos",
-    "fig08_mes_e_dia_semana.png": "Figura 8 - Atropelamentos por mês do ano e dia da semana",
-    "fig09_correlacoes.png": "Figura 9 - Correlação (Spearman) e associação (V de Cramér)",
+    "fig03_boxplot_coordenadas.png": "Figura 3 - Boxplots das coordenadas x e y",
+    "fig04_mapa_por_classe.png": "Figura 4 - Distribuição espacial por classe",
+    "fig05_densidade_espacial.png": "Figura 5 - Densidade espacial dos atropelamentos",
+    "fig06_serie_mensal.png": "Figura 6 - Série mensal de atropelamentos",
+    "fig07_por_mes_do_ano.png": "Figura 7 - Atropelamentos por mês do ano",
+    "fig08_correlacao.png": "Figura 8 - Correlação de Spearman entre as variáveis numéricas",
 }
 
 
@@ -156,7 +145,6 @@ def salvar_figura(figura, nome_do_arquivo):
     """Salva o gráfico em .png, fecha a figura e insere a imagem com legenda no .md."""
     figura.savefig(PASTA_DE_SAIDA / nome_do_arquivo)  # grava a imagem na pasta de saída
     plt.close(figura)  # fecha a figura para liberar memória
-    print(f"   [figura salva: {nome_do_arquivo}]")  # avisa no terminal
     legenda = LEGENDAS_DAS_FIGURAS.get(nome_do_arquivo, nome_do_arquivo)  # busca a legenda da figura
     linhas_do_relatorio.extend([
         "",
@@ -223,9 +211,9 @@ if quantidade_de_duplicatas > 0:  # se houver duplicatas...
     )
     # ...as cópias são retiradas desta análise, senão todas as contagens ficariam dobradas
     base_silvestre = base_silvestre.drop_duplicates(subset=colunas_sem_objectid)
-    registrar(f"-> Sem as duplicatas, a análise segue com {len(base_silvestre)} registros")
+    registrar(f"Sem as duplicatas, a análise segue com {len(base_silvestre)} registros.")
 
-# Converte a coluna data_dt em data, para contar atropelamentos por ano, mês e dia da semana
+# Converte a coluna data_dt em data, para contar atropelamentos por ano e por mês
 if pd.api.types.is_datetime64_any_dtype(base_silvestre["data_dt"]):  # o Excel já trouxe como data
     base_silvestre["data"] = base_silvestre["data_dt"]
 else:  # veio como texto no formato dia/mês/ano com 2 dígitos (ex.: 05/04/10)
@@ -235,7 +223,6 @@ else:  # veio como texto no formato dia/mês/ano com 2 dígitos (ex.: 05/04/10)
         errors="coerce",  # datas inválidas viram NaT (data ausente) em vez de dar erro
     )
 base_silvestre["numero_do_mes"] = base_silvestre["data"].dt.month  # 1 = janeiro ... 12 = dezembro
-base_silvestre["numero_do_dia_da_semana"] = base_silvestre["data"].dt.dayofweek  # 0 = segunda ... 6 = domingo
 
 # =============================================================================
 # 3. VALORES AUSENTES E 'nao_identificado'
@@ -337,30 +324,6 @@ problemas_encontrados.append(
     "espécies têm menos de 10 registros."
 )
 
-# 15 espécies mais frequentes, guardando também a classe de cada uma (para colorir as barras)
-especies_mais_frequentes = (
-    base_silvestre[especie_identificada]
-    .groupby("especie_nm")["classe"]  # agrupa por espécie, olhando a coluna classe
-    .agg(quantidade="size", classe="first")  # conta os registros e pega a classe da espécie
-    .sort_values("quantidade", ascending=False)  # ordena da mais para a menos frequente
-    .head(15)  # fica com as 15 primeiras
-)
-figura, eixo = plt.subplots(figsize=(8, 5))
-eixo.barh(
-    especies_mais_frequentes.index.str.replace("_", " "),  # nomes sem underline
-    especies_mais_frequentes["quantidade"],
-    color=[CORES_POR_CLASSE.get(classe, "gray") for classe in especies_mais_frequentes["classe"]],
-)
-eixo.invert_yaxis()  # mais frequente no topo
-eixo.set_xlabel("registros")
-eixo.set_title("15 espécies mais atropeladas (cor = classe)")
-eixo.legend(  # legenda manual: um quadradinho colorido para cada classe
-    handles=[plt.Rectangle((0, 0), 1, 1, color=cor, label=NOME_DA_CLASSE_EM_PORTUGUES[classe])
-             for classe, cor in CORES_POR_CLASSE.items()],
-    loc="lower right",
-)
-salvar_figura(figura, "fig03_top_especies.png")
-
 # =============================================================================
 # 5. ESTATÍSTICAS DESCRITIVAS DAS VARIÁVEIS NUMÉRICAS E OUTLIERS
 # =============================================================================
@@ -394,15 +357,12 @@ for eixo, coordenada in zip(eixos, ["x", "y"]):  # um boxplot em cada eixo
     eixo.set_title(f"Boxplot de {coordenada} (UTM, m)")
     eixo.set_ylabel("")
     eixo.ticklabel_format(style="plain", axis="y")  # mostra números inteiros (sem notação científica)
-salvar_figura(figura, "fig04_boxplot_coordenadas.png")
+salvar_figura(figura, "fig03_boxplot_coordenadas.png")
 
 # =============================================================================
 # 6. DISTRIBUIÇÃO ESPACIAL DOS ATROPELAMENTOS
 # =============================================================================
 registrar_titulo("6. Distribuição espacial dos atropelamentos")
-
-registrar("Registros por unidade de conservação (uc):")
-registrar_tabela(base_silvestre["uc"].value_counts())
 
 # Um mapa para cada classe (grade 2 x 2); em cinza ficam todas as ocorrências como referência
 classes_no_grafico = [classe for classe in CORES_POR_CLASSE if classe in classes_validas.index]
@@ -416,7 +376,7 @@ for eixo, classe in zip(eixos.ravel(), classes_no_grafico):  # ravel() transform
     eixo.ticklabel_format(style="plain")  # coordenadas sem notação científica
     eixo.tick_params(labelsize=7)  # números dos eixos menores
 figura.suptitle("Ocorrências por classe (cinza = todas)", fontweight="bold")
-salvar_figura(figura, "fig05_mapa_por_classe.png")
+salvar_figura(figura, "fig04_mapa_por_classe.png")
 
 # Mapa de densidade: hexágonos mais escuros = mais atropelamentos naquela área
 figura, eixo = plt.subplots(figsize=(8, 6))
@@ -431,7 +391,7 @@ eixo.tick_params(axis="x", rotation=30)  # gira os números do eixo x para não 
 eixo.set_xlabel("x (UTM)")
 eixo.set_ylabel("y (UTM)")
 eixo.set_title("Densidade espacial dos atropelamentos")
-salvar_figura(figura, "fig06_densidade_espacial.png")
+salvar_figura(figura, "fig05_densidade_espacial.png")
 
 # =============================================================================
 # 7. DISTRIBUIÇÃO TEMPORAL DOS ATROPELAMENTOS
@@ -449,13 +409,6 @@ registrar("Registros por mês do ano:")
 atropelamentos_por_mes = base_silvestre["numero_do_mes"].value_counts().reindex(range(1, 13), fill_value=0)
 atropelamentos_por_mes.index = NOMES_DOS_MESES  # troca 1..12 por jan..dez
 registrar_tabela(atropelamentos_por_mes.rename_axis("mês"))
-registrar()
-registrar("Registros por dia da semana:")
-atropelamentos_por_dia_da_semana = (
-    base_silvestre["numero_do_dia_da_semana"].value_counts().reindex(range(7), fill_value=0)
-)
-atropelamentos_por_dia_da_semana.index = NOMES_DOS_DIAS_DA_SEMANA  # troca 0..6 por seg..dom
-registrar_tabela(atropelamentos_por_dia_da_semana.rename_axis("dia"))
 
 # Série temporal: total de atropelamentos em cada mês do período
 mes_de_cada_registro = base_silvestre["data"].dt.to_period("M")  # ex.: 2011-03
@@ -464,18 +417,15 @@ figura, eixo = plt.subplots(figsize=(11, 3.8))
 eixo.plot(serie_mensal.index.to_timestamp(), serie_mensal.values, color=COR_AZUL, marker="o", markersize=3)
 eixo.set_ylabel("registros")
 eixo.set_title("Atropelamentos por mês (abr/2010 - mar/2015)")
-salvar_figura(figura, "fig07_serie_mensal.png")
+salvar_figura(figura, "fig06_serie_mensal.png")
 
-# Dois gráficos de barras lado a lado: por mês do ano e por dia da semana
-figura, eixos = plt.subplots(1, 2, figsize=(12, 3.8), gridspec_kw={"width_ratios": [2, 1]})  # esquerdo 2x mais largo
-eixos[0].bar(NOMES_DOS_MESES, atropelamentos_por_mes.values, color=COR_AZUL)
-eixos[0].set_title("Por mês do ano")
-eixos[0].set_ylabel("registros")
-eixos[1].bar(NOMES_DOS_DIAS_DA_SEMANA, atropelamentos_por_dia_da_semana.values, color=COR_AZUL)
-eixos[1].set_title("Por dia da semana")
-for eixo in eixos:
-    eixo.grid(axis="x", visible=False)  # remove as linhas de grade verticais
-salvar_figura(figura, "fig08_mes_e_dia_semana.png")
+# Gráfico de barras: total de atropelamentos em cada mês do ano (somando todos os anos)
+figura, eixo = plt.subplots(figsize=(8, 3.8))
+eixo.bar(NOMES_DOS_MESES, atropelamentos_por_mes.values, color=COR_AZUL)
+eixo.set_ylabel("registros")
+eixo.set_title("Atropelamentos por mês do ano")
+eixo.grid(axis="x", visible=False)  # remove as linhas de grade verticais
+salvar_figura(figura, "fig07_por_mes_do_ano.png")
 
 # =============================================================================
 # 8. ATRIBUTOS REDUNDANTES E CORRELAÇÃO ENTRE ATRIBUTOS
@@ -483,95 +433,37 @@ salvar_figura(figura, "fig08_mes_e_dia_semana.png")
 registrar_titulo("8. Atributos redundantes e correlação entre atributos")
 
 # ---- Atributos redundantes: ano, mes e dia_da_sem repetem a informação de data_dt ----
-registrar("Atributos que repetem a informação de data_dt:")
 ano_igual_ao_da_data = base_silvestre["ano"] == base_silvestre["data"].dt.year  # True = mesmo ano
-registrar(f"   ano igual ao ano de data_dt em {ano_igual_ao_da_data.mean():.1%} dos registros")
-# Converte 'seg', 'ter'... da coluna original em 0, 1... para comparar com o dia calculado pela data
-numero_do_dia_por_nome = {nome: numero for numero, nome in enumerate(NOMES_DOS_DIAS_DA_SEMANA)}
-dia_da_semana_original = base_silvestre["dia_da_sem"].str[:3].map(numero_do_dia_por_nome)
-dia_igual_ao_da_data = dia_da_semana_original == base_silvestre["numero_do_dia_da_semana"]
-registrar(f"   dia_da_sem igual ao dia de data_dt em {dia_igual_ao_da_data.mean():.1%} dos registros "
-          f"({(~dia_igual_ao_da_data).sum()} divergências)")
+registrar("'ano', 'mes' e 'dia_da_sem' podem ser obtidos a partir de 'data_dt'.")
+registrar(f"   'ano' igual ao ano de 'data_dt' em {ano_igual_ao_da_data.mean():.1%} dos registros")
 problemas_encontrados.append("Atributos redundantes: 'ano', 'mes' e 'dia_da_sem' repetem a informação de 'data_dt'.")
-if (~dia_igual_ao_da_data).sum() > 0:  # se houver qualquer divergência
-    problemas_encontrados.append(
-        f"'dia_da_sem' não confere com 'data_dt' em {(~dia_igual_ao_da_data).sum()} registros."
-    )
-
-# ---- Atributos redundantes: hierarquia taxonômica (espécie -> família -> ordem -> classe) ----
-registros_com_especie_e_classe = base_silvestre[
-    (base_silvestre["especie_nm"] != NAO_IDENTIFICADO) & (base_silvestre["classe"] != NAO_IDENTIFICADO)
-]
-classes_por_especie = registros_com_especie_e_classe.groupby("especie_nm")["classe"].nunique()
-registrar()
-registrar("Hierarquia taxonômica (espécie -> família -> ordem -> classe):")
-registrar(f"   espécies associadas a mais de uma classe: {(classes_por_especie > 1).sum()}")
-if (classes_por_especie > 1).sum() == 0:  # cada espécie pertence a uma única classe
-    problemas_encontrados.append(
-        "Atributos redundantes: 'especie_nm', 'nome_popul', 'familia' e 'ordem' determinam a 'classe'."
-    )
 
 # ---- Correlação de Spearman entre variáveis numéricas ----
 # Spearman mede se duas variáveis crescem juntas (+1), em sentidos opostos (-1) ou não se relacionam (0)
-variaveis_para_correlacao = ["x", "y", "ano", "numero_do_mes", "numero_do_dia_da_semana"]
+variaveis_para_correlacao = ["x", "y", "ano", "numero_do_mes"]
 matriz_de_correlacao = base_silvestre[variaveis_para_correlacao].corr(method="spearman")
 registrar()
-registrar("Correlação de Spearman (numéricas):")
+registrar("Correlação de Spearman entre as variáveis numéricas:")
 registrar_tabela(matriz_de_correlacao.round(2))
 
-
-# ---- V de Cramér entre variáveis categóricas ----
-def calcular_v_de_cramer(variavel_a, variavel_b):
-    """Associação entre duas variáveis categóricas: 0 = nenhuma, 1 = uma determina a outra."""
-    tabela_de_contingencia = pd.crosstab(variavel_a, variavel_b)  # contagem de cada combinação de valores
-    estatistica_qui_quadrado = chi2_contingency(tabela_de_contingencia)[0]  # [0] = valor do qui-quadrado
-    total_de_registros = tabela_de_contingencia.values.sum()
-    menor_dimensao = min(tabela_de_contingencia.shape) - 1  # min(linhas, colunas) - 1
-    return np.sqrt(estatistica_qui_quadrado / (total_de_registros * menor_dimensao))  # fórmula do V de Cramér
-
-
-variaveis_categoricas = ["classe", "uc", "ano", "mes", "dia_da_sem"]  # atributos originais da base
-matriz_v_de_cramer = pd.DataFrame(index=variaveis_categoricas, columns=variaveis_categoricas, dtype=float)
-for variavel_linha in variaveis_categoricas:  # calcula o V para cada par de variáveis
-    for variavel_coluna in variaveis_categoricas:
-        if variavel_linha == variavel_coluna:
-            matriz_v_de_cramer.loc[variavel_linha, variavel_coluna] = 1.0  # variável com ela mesma = 1
-        else:
-            matriz_v_de_cramer.loc[variavel_linha, variavel_coluna] = calcular_v_de_cramer(
-                base_silvestre[variavel_linha].astype(str), base_silvestre[variavel_coluna].astype(str)
-            )
-registrar()
-registrar("V de Cramér (categóricas):")
-registrar_tabela(matriz_v_de_cramer.round(2))
-
-# Mapas de calor das duas matrizes, lado a lado
-figura, eixos = plt.subplots(1, 2, figsize=(14, 5.5))
-figura.subplots_adjust(wspace=0.4)  # espaço entre os dois gráficos
+# Mapa de calor da matriz de correlação
+figura, eixo = plt.subplots(figsize=(6, 5))
 sns.heatmap(matriz_de_correlacao, annot=True, fmt=".2f",  # annot = escreve o valor em cada quadrado
-            cmap="RdBu_r", vmin=-1, vmax=1, ax=eixos[0])  # vermelho = positiva, azul = negativa
-eixos[0].set_title("Spearman (numéricas)")
-sns.heatmap(matriz_v_de_cramer, annot=True, fmt=".2f", cmap="Blues", vmin=0, vmax=1, ax=eixos[1])
-eixos[1].set_title("V de Cramér (categóricas)")
-salvar_figura(figura, "fig09_correlacoes.png")
+            cmap="RdBu_r", vmin=-1, vmax=1, ax=eixo)  # vermelho = positiva, azul = negativa
+eixo.set_title("Correlação de Spearman")
+salvar_figura(figura, "fig08_correlacao.png")
 
-# Lista os pares com associação elevada (>= 0,7), olhando só a metade de cima de cada matriz
-pares_com_associacao_elevada = []
+# Lista os pares com correlação elevada (>= 0,7), olhando só a metade de cima da matriz
+pares_com_correlacao_elevada = []
 for posicao, variavel_a in enumerate(variaveis_para_correlacao):
     for variavel_b in variaveis_para_correlacao[posicao + 1:]:  # só pares ainda não vistos
         valor = matriz_de_correlacao.loc[variavel_a, variavel_b]
         if abs(valor) >= 0.7:  # abs = valor absoluto (vale para correlação positiva ou negativa)
-            pares_com_associacao_elevada.append((variavel_a, variavel_b, valor))
-for posicao, variavel_a in enumerate(variaveis_categoricas):
-    for variavel_b in variaveis_categoricas[posicao + 1:]:
-        valor = matriz_v_de_cramer.loc[variavel_a, variavel_b]
-        if valor >= 0.7:
-            pares_com_associacao_elevada.append((variavel_a, variavel_b, valor))
-if pares_com_associacao_elevada:
-    descricao_dos_pares = "; ".join(
-        f"{variavel_a} x {variavel_b} ({valor:.2f})"
-        for variavel_a, variavel_b, valor in pares_com_associacao_elevada
-    )
-    problemas_encontrados.append(f"Correlação elevada (>= 0,7) entre: {descricao_dos_pares}.")
+            pares_com_correlacao_elevada.append(f"{variavel_a} x {variavel_b} ({valor:.2f})")
+if pares_com_correlacao_elevada:
+    problemas_encontrados.append(f"Correlação elevada (>= 0,7) entre: {'; '.join(pares_com_correlacao_elevada)}.")
+else:
+    registrar("Nenhum par de variáveis numéricas com correlação elevada (>= 0,7).")
 
 # =============================================================================
 # 9. RESUMO DOS POSSÍVEIS PROBLEMAS ENCONTRADOS
@@ -583,4 +475,3 @@ for numero, problema in enumerate(problemas_encontrados, start=1):  # numera a p
 # Junta todas as linhas do relatório e grava o arquivo .md (UTF-8 para manter os acentos)
 caminho_do_relatorio = PASTA_DE_SAIDA / "resultados_etapa1.md"
 caminho_do_relatorio.write_text("\n".join(linhas_do_relatorio), encoding="utf-8")
-print(f"\nResultados salvos em: {PASTA_DE_SAIDA.resolve()}")

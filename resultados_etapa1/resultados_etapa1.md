@@ -3,43 +3,43 @@
 
 ## 1. Descrição do problema
 
-Base do Projeto RodoFauna (IBRAM/DF): animais encontrados atropelados em percursos sistemáticos nas rodovias do DF entre abr/2010 e mar/2015. Cada linha é uma ocorrência (um animal), com data, classificação taxonômica, unidade de conservação (uc) e coordenadas UTM (x, y).
-
-Objetivo: prever o tipo (classe) e a intensidade/ocorrência de atropelamentos de fauna SILVESTRE e identificar trechos críticos (hotspots).
-
+Base do Projeto RodoFauna (IBRAM/DF): animais encontrados atropelados em percursos sistemáticos nas rodovias do DF entre abr/2010 e mar/2015.  
+Cada linha é uma ocorrência (um animal), com data, classificação taxonômica, unidade de conservação (uc) e coordenadas UTM (x, y).  
+Objetivo: prever o tipo e a intensidade/ocorrência de atropelamentos de fauna SILVESTRE e identificar trechos críticos (hotspots).  
 
 ## 2. Registros, atributos e tipos
 
 Arquivo: data\rodofauna.xlsx  
-Base bruta: 10328 registros x 20 atributos  
+Quantidade de registros: 10328  
+Quantidade de atributos: 20  
 
 Tipos dos atributos:  
 
-|  | tipo | valores_distintos | pode_ser_preditor |
-|---|---|---|---|
-| objectid | int64 | 10328 | não |
-| id | int64 | 5164 | não |
-| campanha | int64 | 482 | não |
-| ano | int64 | 6 | sim |
-| periodo | int64 | 5 | não |
-| mes | string | 12 | não |
-| data_dt | string | 483 | sim |
-| dia_da_sem | string | 6 | sim |
-| silvestre_ | string | 2 | não |
-| classe | string | 5 | alvo |
-| ordem | string | 34 | não |
-| familia | string | 72 | não |
-| especie_nm | string | 192 | alvo |
-| nome_popul | string | 176 | não |
-| uc | string | 4 | sim |
-| x | int64 | 4556 | sim |
-| y | int64 | 3858 | sim |
-| posicao | string | 11 | não |
-| hora | string | 476 | não |
-| sexo | string | 4 | não |
+|  | tipo | valores_distintos |
+|---|---|---|
+| objectid | int64 | 10328 |
+| id | int64 | 5164 |
+| campanha | int64 | 482 |
+| ano | int64 | 6 |
+| periodo | int64 | 5 |
+| mes | string | 12 |
+| data_dt | string | 483 |
+| dia_da_sem | string | 6 |
+| silvestre_ | string | 2 |
+| classe | string | 5 |
+| ordem | string | 34 |
+| familia | string | 72 |
+| especie_nm | string | 192 |
+| nome_popul | string | 176 |
+| uc | string | 4 |
+| x | int64 | 4556 |
+| y | int64 | 3858 |
+| posicao | string | 11 |
+| hora | string | 476 |
+| sexo | string | 4 |
 
 
-silvestre_ (base bruta):  
+Registros silvestres x domésticos:  
 
 | silvestre_ | registros |
 |---|---|
@@ -47,11 +47,9 @@ silvestre_ (base bruta):
 | domestico | 1484 |
 
 
-Após filtrar silvestre_ == 'silvestre': 8844 registros  
+Registros de fauna silvestre (usados no restante da análise): 8844  
 Registros duplicados (todas as colunas iguais, exceto objectid): 4422  
-Valores distintos de 'id' na base bruta: 5164 (em 10328 linhas)  
--> Duplicatas removidas. Base analisada daqui em diante: 4422 registros  
-Datas que não puderam ser convertidas: 0  
+Sem as duplicatas, a análise segue com 4422 registros.  
 
 ## 3. Valores ausentes e 'nao_identificado'
 
@@ -73,32 +71,15 @@ Datas que não puderam ser convertidas: 0
 *Figura 1 - Percentual de valores ausentes/nao_identificado por atributo*
 
 
-## 4. Estatísticas descritivas e outliers
+## 4. Variável-alvo de cada experimento e distribuição das classes
 
+Variável-alvo de cada experimento:  
+- Classificação multiclasse: 'classe' (aves, mamíferos, répteis, anfíbios)
+- Classificação binária: alto/baixo risco de atropelamento por segmento da rodovia
+- Regressão: número de atropelamentos por segmento da rodovia (e por período)
+Os alvos binário e de regressão não existem prontos na base: são construídos agregando os registros por segmento, o que é feito nas próximas etapas.  
 
-|  | quantidade | média | desvio_padrão | mínimo | 1º_quartil | mediana | 3º_quartil | máximo |
-|---|---|---|---|---|---|---|---|---|
-| x | 4422 | 199824.18 | 18856.58 | 168694 | 183471.25 | 197849 | 217625.25 | 228478 |
-| y | 4422 | 8261912.75 | 17371.29 | 8230610 | 8241139 | 8271545.5 | 8274590.75 | 8282622 |
-| ano | 4422 | 2012.29 | 1.39 | 2010 | 2011 | 2012 | 2013 | 2015 |
-| numero_do_mes | 4422 | 5.92 | 4.01 | 1 | 2 | 5 | 10 | 12 |
-| dia_do_ano | 4422 | 164.9 | 122.44 | 2 | 52 | 125 | 297 | 364 |
-
-
-Outliers em x e y (critério de Tukey: fora de [Q1 - 1,5*IQR, Q3 + 1,5*IQR]):  
-- x: 0 outliers
-- y: 0 outliers
-- Pontos fora dos limites do DF: 0
-
-![Figura 2 - Boxplots das coordenadas x e y](fig02_boxplot_coordenadas.png)
-*Figura 2 - Boxplots das coordenadas x e y*
-
-
-## 5. Variáveis-alvo e distribuição das classes
-
-
-### 5.1 Classificação multiclasse -> alvo: 'classe'
-
+Distribuição da variável 'classe':  
 
 | classe | registros | percentual |
 |---|---|---|
@@ -108,77 +89,49 @@ Outliers em x e y (critério de Tukey: fora de [Q1 - 1,5*IQR, Q3 + 1,5*IQR]):
 | amphibians | 274 | 6.2 |
 | nao_identificado | 1 | 0.02 |
 
-Razão maior/menor classe: 11.0 : 1  
-Acurácia de quem sempre chuta 'birds': 68.1%  
+Razão entre a maior e a menor classe: 11.0 : 1  
 
-![Figura 3 - Distribuição da variável-alvo classe](fig03_distribuicao_classe.png)
-*Figura 3 - Distribuição da variável-alvo classe*
-
-
-### 5.2 Alvo alternativo 'especie_nm' (classes com poucos exemplos)
-
-Espécies distintas: 179 | registros sem espécie identificada: 1001  
-- espécies com >=  10 registros: 59
-- espécies com >=  30 registros: 22
-- espécies com >= 100 registros: 4
-- espécies com < 10 registros: 120 (67% das espécies)
-
-![Figura 4 - 15 espécies mais atropeladas](fig04_top_especies.png)
-*Figura 4 - 15 espécies mais atropeladas*
+![Figura 2 - Distribuição da variável-alvo classe](fig02_distribuicao_classe.png)
+*Figura 2 - Distribuição da variável-alvo classe*
 
 
-### 5.3 e 5.4 Alvos binário e de regressão (células de 500 m)
+Distribuição da variável 'especie_nm' (possível alvo alternativo):  
+- espécies distintas: 179
+- espécies com pelo menos 10 registros: 59
+- espécies com pelo menos 30 registros: 22
+- espécies com pelo menos 100 registros: 4
+- espécies com menos de 10 registros: 120
 
-Classificação binária -> alvo: hotspot (1/0) por célula de 500 m  
-Regressão -> alvo: nº de atropelamentos por célula de 500 m por mês  
-Células de 500 m com pelo menos 1 atropelamento: 293  
-Atropelamentos por célula: média = 15.1, mediana = 10.0, máximo = 96  
-Painel célula x mês: 293 células x 60 meses = 17580 observações, 83% delas com zero atropelamentos  
-Obs.: a base só tem ocorrências; a classe 0 (sem/baixo risco) do problema binário  
-- precisa ser construída na Etapa 2 e justificada.
-
-![Figura 5 - Atropelamentos por célula de 500 m](fig05_atropelamentos_por_celula.png)
-*Figura 5 - Atropelamentos por célula de 500 m*
+## 5. Estatísticas descritivas das variáveis numéricas
 
 
-## 6. Distribuição espacial
-
-Registros por unidade de conservação (uc):  
-
-| uc | registros |
-|---|---|
-| esecae | 2024 |
-| pnb | 1257 |
-| jbb_fal_ibge | 1139 |
-| nao_identificado | 2 |
+|  | quantidade | média | desvio_padrão | mínimo | 1º_quartil | mediana | 3º_quartil | máximo |
+|---|---|---|---|---|---|---|---|---|
+| x | 4422 | 199824.18 | 18856.58 | 168694 | 183471.25 | 197849 | 217625.25 | 228478 |
+| y | 4422 | 8261912.75 | 17371.29 | 8230610 | 8241139 | 8271545.5 | 8274590.75 | 8282622 |
+| ano | 4422 | 2012.29 | 1.39 | 2010 | 2011 | 2012 | 2013 | 2015 |
 
 
-10 células mais críticas:  
+Outliers em x e y (critério de Tukey: fora de [Q1 - 1,5*IQR, Q3 + 1,5*IQR]):  
+- x: 0 outliers
+- y: 0 outliers
 
-| célula (x_y) | registros |
-|---|---|
-| 437_16547 | 96 |
-| 438_16547 | 94 |
-| 439_16547 | 68 |
-| 427_16548 | 62 |
-| 441_16548 | 60 |
-| 380_16464 | 59 |
-| 435_16547 | 58 |
-| 440_16548 | 56 |
-| 436_16547 | 55 |
-| 425_16548 | 52 |
-
--> concentram 14.9% dos atropelamentos em 3.4% das células  
-
-![Figura 6 - Distribuição espacial por classe](fig06_mapa_por_classe.png)
-*Figura 6 - Distribuição espacial por classe*
+![Figura 3 - Boxplots das coordenadas x e y](fig03_boxplot_coordenadas.png)
+*Figura 3 - Boxplots das coordenadas x e y*
 
 
-![Figura 7 - Densidade espacial dos atropelamentos](fig07_densidade_espacial.png)
-*Figura 7 - Densidade espacial dos atropelamentos*
+## 6. Distribuição espacial dos atropelamentos
 
 
-## 7. Distribuição temporal
+![Figura 4 - Distribuição espacial por classe](fig04_mapa_por_classe.png)
+*Figura 4 - Distribuição espacial por classe*
+
+
+![Figura 5 - Densidade espacial dos atropelamentos](fig05_densidade_espacial.png)
+*Figura 5 - Densidade espacial dos atropelamentos*
+
+
+## 7. Distribuição temporal dos atropelamentos
 
 Período: 05/04/2010 a 30/03/2015  
 (2010 começa em abril e 2015 termina em março: anos incompletos)  
@@ -213,78 +166,40 @@ Registros por mês do ano:
 | dez | 434 |
 
 
-Registros por dia da semana:  
-
-| dia | registros |
-|---|---|
-| seg | 1754 |
-| ter | 372 |
-| qua | 172 |
-| qui | 1791 |
-| sex | 333 |
-| sab | 0 |
-| dom | 0 |
+![Figura 6 - Série mensal de atropelamentos](fig06_serie_mensal.png)
+*Figura 6 - Série mensal de atropelamentos*
 
 
-Período climático (seco = mai-set, chuvoso = out-abr):  
-- chuvoso: 3561 (509 por mês)
-- seco:    861 (172 por mês)
-
-![Figura 8 - Série mensal de atropelamentos](fig08_serie_mensal.png)
-*Figura 8 - Série mensal de atropelamentos*
+![Figura 7 - Atropelamentos por mês do ano](fig07_por_mes_do_ano.png)
+*Figura 7 - Atropelamentos por mês do ano*
 
 
-![Figura 9 - Atropelamentos por mês do ano e dia da semana](fig09_mes_e_dia_semana.png)
-*Figura 9 - Atropelamentos por mês do ano e dia da semana*
+## 8. Atributos redundantes e correlação entre atributos
+
+'ano', 'mes' e 'dia_da_sem' podem ser obtidos a partir de 'data_dt'.  
+- 'ano' igual ao ano de 'data_dt' em 100.0% dos registros
+
+Correlação de Spearman entre as variáveis numéricas:  
+
+|  | x | y | ano | numero_do_mes |
+|---|---|---|---|---|
+| x | 1 | 0.65 | -0.05 | 0.06 |
+| y | 0.65 | 1 | 0.01 | 0 |
+| ano | -0.05 | 0.01 | 1 | -0.2 |
+| numero_do_mes | 0.06 | 0 | -0.2 | 1 |
 
 
-## 8. Atributos redundantes e correlação
+![Figura 8 - Correlação de Spearman entre as variáveis numéricas](fig08_correlacao.png)
+*Figura 8 - Correlação de Spearman entre as variáveis numéricas*
 
-Concordância dos campos originais com data_dt:  
-- ano        x data_dt: 100.0%
-- dia_da_sem x data_dt: 99.2%  (35 divergências)
-- valores de dia_da_sem: {'qui': 1773, 'seg': 1763, 'ter': 372, 'sex': 333, 'qua': 172, 'eg_': 9}
--> ano, mes e dia_da_sem são deriváveis de data_dt (redundantes).  
-Espécies associadas a mais de uma classe: 0 -> especie_nm/ordem/familia determinam a classe (não podem ser entrada).  
-Células de 500 m com uma única uc: 93.5% -> uc é quase redundante com (x, y).  
+Nenhum par de variáveis numéricas com correlação elevada (>= 0,7).  
 
-Correlação de Spearman (numéricas):  
+## 9. Resumo dos possíveis problemas encontrados
 
-|  | x | y | ano | numero_do_mes | dia_do_ano | numero_do_dia_da_semana |
-|---|---|---|---|---|---|---|
-| x | 1 | 0.65 | -0.05 | 0.06 | 0.06 | 0.03 |
-| y | 0.65 | 1 | 0.01 | 0 | 0 | 0.03 |
-| ano | -0.05 | 0.01 | 1 | -0.2 | -0.2 | 0 |
-| numero_do_mes | 0.06 | 0 | -0.2 | 1 | 0.99 | 0.01 |
-| dia_do_ano | 0.06 | 0 | -0.2 | 0.99 | 1 | 0.01 |
-| numero_do_dia_da_semana | 0.03 | 0.03 | 0 | 0.01 | 0.01 | 1 |
-
-
-V de Cramér (categóricas):  
-
-|  | classe | uc | periodo_climatico | ano | numero_do_mes |
-|---|---|---|---|---|---|
-| classe | 1 | 0.12 | 0.16 | 0.06 | 0.19 |
-| uc | 0.12 | 1 | 0.04 | 0.06 | 0.11 |
-| periodo_climatico | 0.16 | 0.04 | 1 | 0.18 | 1 |
-| ano | 0.06 | 0.06 | 0.18 | 1 | 0.2 |
-| numero_do_mes | 0.19 | 0.11 | 1 | 0.2 | 1 |
-
-
-![Figura 10 - Correlação (Spearman) e associação (V de Cramér)](fig10_correlacoes.png)
-*Figura 10 - Correlação (Spearman) e associação (V de Cramér)*
-
-
-## 9. Resumo dos problemas encontrados
-
-1. 4422 registros silvestres duplicados (50.0%). Sem removê-los, todas as contagens ficam infladas.  
-2. 'sexo' sem informação em 96% dos registros (já excluído como preditor pelo enunciado).  
-3. 'posicao' sem informação em 53% dos registros (já excluído como preditor pelo enunciado).  
-4. 'hora' sem informação em 38% dos registros (já excluído como preditor pelo enunciado).  
-5. 'classe' desbalanceada (11.0:1): 'birds' tem 68% dos registros. Acurácia sozinha é enganosa.  
-6. 1 registro(s) com classe = nao_identificado (remover do multiclasse).  
-7. Espécies: 120 das 179 têm menos de 10 registros -> classificar por espécie não é viável sem agrupar; por isso o multiclasse usa 'classe'.  
-8. Alvo de regressão célula x mês tem 83% de zeros (muitos zeros; avaliar agregação maior, ex.: trimestre).  
-9. Nenhum registro em sábado/domingo: as coletas só ocorreram em dias úteis, então 'dia_da_sem' reflete a agenda de coleta, não o risco.  
-10. 'dia_da_sem' diverge da data em 35 registros (erro de digitação) - derivar o dia da semana de data_dt.  
-11. Pares fortemente associados (>= 0,7): numero_do_mes x dia_do_ano (0.99); periodo_climatico x numero_do_mes (1.00) -> manter só um de cada par.  
+1. Registros duplicados: 4422 (50.0% dos registros silvestres).  
+2. 'sexo' sem informação em 96% dos registros.  
+3. 'posicao' sem informação em 53% dos registros.  
+4. 'hora' sem informação em 38% dos registros.  
+5. Classes desbalanceadas: 'birds' tem 68% dos registros e a maior classe é 11.0 vezes a menor.  
+6. Classes com poucos exemplos: 120 das 179 espécies têm menos de 10 registros.  
+7. Atributos redundantes: 'ano', 'mes' e 'dia_da_sem' repetem a informação de 'data_dt'.  
