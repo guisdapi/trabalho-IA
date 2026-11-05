@@ -321,7 +321,7 @@ for posicao, percentual in enumerate(tabela_de_ausentes["percentual_sem_informac
     eixo.text(percentual + 0.5, posicao, f"{percentual:.1f}%", va="center", fontsize=9)  # rótulo no fim da barra
 eixo.set_xlim(0, 105)  # eixo x de 0% a 105% (folga para o rótulo)
 eixo.set_xlabel("% dos registros silvestres (ausente + nao_identificado)")
-eixo.set_title("Atributos com informação faltante\n(laranja = não pode ser preditor pelo enunciado)")
+eixo.set_title("Atributos com informação faltante")
 salvar_figura(figura, "fig01_ausentes.png")
 
 # Registra como problema todo atributo com 30% ou mais de informação faltante

@@ -56,7 +56,7 @@ Datas que não puderam ser convertidas: 0
 ## 3. Valores ausentes e 'nao_identificado'
 
 
-|  | ausentes | nao_identificado | %_sem_info |
+|  | ausentes | nao_identificado | percentual_sem_informacao |
 |---|---|---|---|
 | sexo | 0 | 4253 | 96.18 |
 | posicao | 0 | 2328 | 52.65 |
@@ -76,12 +76,12 @@ Datas que não puderam ser convertidas: 0
 ## 4. Estatísticas descritivas e outliers
 
 
-|  | n | média | desvio | mín | 25% | mediana | 75% | máx |
+|  | quantidade | média | desvio_padrão | mínimo | 1º_quartil | mediana | 3º_quartil | máximo |
 |---|---|---|---|---|---|---|---|---|
 | x | 4422 | 199824.18 | 18856.58 | 168694 | 183471.25 | 197849 | 217625.25 | 228478 |
 | y | 4422 | 8261912.75 | 17371.29 | 8230610 | 8241139 | 8271545.5 | 8274590.75 | 8282622 |
 | ano | 4422 | 2012.29 | 1.39 | 2010 | 2011 | 2012 | 2013 | 2015 |
-| mes_num | 4422 | 5.92 | 4.01 | 1 | 2 | 5 | 10 | 12 |
+| numero_do_mes | 4422 | 5.92 | 4.01 | 1 | 2 | 5 | 10 | 12 |
 | dia_do_ano | 4422 | 164.9 | 122.44 | 2 | 52 | 125 | 297 | 364 |
 
 
@@ -100,7 +100,7 @@ Outliers em x e y (critério de Tukey: fora de [Q1 - 1,5*IQR, Q3 + 1,5*IQR]):
 ### 5.1 Classificação multiclasse -> alvo: 'classe'
 
 
-| classe | registros | % |
+| classe | registros | percentual |
 |---|---|---|
 | birds | 3009 | 68.05 |
 | reptiles | 690 | 15.6 |
@@ -132,7 +132,7 @@ Espécies distintas: 179 | registros sem espécie identificada: 1001
 Classificação binária -> alvo: hotspot (1/0) por célula de 500 m  
 Regressão -> alvo: nº de atropelamentos por célula de 500 m por mês  
 Células de 500 m com pelo menos 1 atropelamento: 293  
-Atropelamentos por célula: média = 15.1, mediana = 10.0, máximo = 96.0  
+Atropelamentos por célula: média = 15.1, mediana = 10.0, máximo = 96  
 Painel célula x mês: 293 células x 60 meses = 17580 observações, 83% delas com zero atropelamentos  
 Obs.: a base só tem ocorrências; a classe 0 (sem/baixo risco) do problema binário  
 - precisa ser construída na Etapa 2 e justificada.
@@ -250,25 +250,25 @@ Células de 500 m com uma única uc: 93.5% -> uc é quase redundante com (x, y).
 
 Correlação de Spearman (numéricas):  
 
-|  | x | y | ano | mes_num | dia_do_ano | dia_semana_num |
+|  | x | y | ano | numero_do_mes | dia_do_ano | numero_do_dia_da_semana |
 |---|---|---|---|---|---|---|
 | x | 1 | 0.65 | -0.05 | 0.06 | 0.06 | 0.03 |
 | y | 0.65 | 1 | 0.01 | 0 | 0 | 0.03 |
 | ano | -0.05 | 0.01 | 1 | -0.2 | -0.2 | 0 |
-| mes_num | 0.06 | 0 | -0.2 | 1 | 0.99 | 0.01 |
+| numero_do_mes | 0.06 | 0 | -0.2 | 1 | 0.99 | 0.01 |
 | dia_do_ano | 0.06 | 0 | -0.2 | 0.99 | 1 | 0.01 |
-| dia_semana_num | 0.03 | 0.03 | 0 | 0.01 | 0.01 | 1 |
+| numero_do_dia_da_semana | 0.03 | 0.03 | 0 | 0.01 | 0.01 | 1 |
 
 
 V de Cramér (categóricas):  
 
-|  | classe | uc | periodo_climatico | ano | mes_num |
+|  | classe | uc | periodo_climatico | ano | numero_do_mes |
 |---|---|---|---|---|---|
 | classe | 1 | 0.12 | 0.16 | 0.06 | 0.19 |
 | uc | 0.12 | 1 | 0.04 | 0.06 | 0.11 |
 | periodo_climatico | 0.16 | 0.04 | 1 | 0.18 | 1 |
 | ano | 0.06 | 0.06 | 0.18 | 1 | 0.2 |
-| mes_num | 0.19 | 0.11 | 1 | 0.2 | 1 |
+| numero_do_mes | 0.19 | 0.11 | 1 | 0.2 | 1 |
 
 
 ![Figura 10 - Correlação (Spearman) e associação (V de Cramér)](fig10_correlacoes.png)
@@ -287,4 +287,4 @@ V de Cramér (categóricas):
 8. Alvo de regressão célula x mês tem 83% de zeros (muitos zeros; avaliar agregação maior, ex.: trimestre).  
 9. Nenhum registro em sábado/domingo: as coletas só ocorreram em dias úteis, então 'dia_da_sem' reflete a agenda de coleta, não o risco.  
 10. 'dia_da_sem' diverge da data em 35 registros (erro de digitação) - derivar o dia da semana de data_dt.  
-11. Pares fortemente associados (>= 0,7): mes_num x dia_do_ano (0.99); periodo_climatico x mes_num (1.00) -> manter só um de cada par.  
+11. Pares fortemente associados (>= 0,7): numero_do_mes x dia_do_ano (0.99); periodo_climatico x numero_do_mes (1.00) -> manter só um de cada par.  
