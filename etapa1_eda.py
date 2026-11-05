@@ -240,7 +240,7 @@ for i, v in enumerate(ausentes["%_sem_info"]):
     ax.text(v + 0.5, i, f"{v:.1f}%", va="center", fontsize=9)
 ax.set_xlim(0, 105)
 ax.set_xlabel("% dos registros silvestres (ausente + nao_identificado)")
-ax.set_title("Atributos com informação faltante\n(laranja = não pode ser preditor pelo enunciado)")
+ax.set_title("Atributos com informação faltante")
 salvar(fig, "fig01_ausentes.png")
 
 for c, v in ausentes["%_sem_info"].items():
