@@ -258,13 +258,21 @@ plt.close()
 # correlação e atributos redundantes
 colunas_para_correlacao = ["x", "y", "ano", "campanha", "periodo", "mes_numero", "dia_semana_numero"]
 matriz_correlacao = tabela_silvestre[colunas_para_correlacao].corr().round(2)
+print("\nMatriz de correlação de Pearson:")
 print(matriz_correlacao.to_string())
 
 # o coeficiente de Pearson vai de −1 a 1. Perto de 1, as duas variáveis crescem juntas.
 # Perto de −1, uma cresce quando a outra cai. Perto de 0, não há relação linear.
 # O .corr() calcula isso para todos os pares. O .to_string() evita que o terminal esconda colunas com “...”
 
+print("\nQuantidade de valores distintos por coluna (colunas com poucos valores ou que repetem outra são candidatas a redundantes):")
 print(tabela_silvestre.nunique().sort_values())
+
+print("\nPares com correlação alta (|r| >= 0.8), candidatos a atributos redundantes:")
+for i, coluna_a in enumerate(colunas_para_correlacao):
+    for coluna_b in colunas_para_correlacao[i + 1:]:
+        if abs(matriz_correlacao.loc[coluna_a, coluna_b]) >= 0.8:
+            print(" ", coluna_a, "x", coluna_b, "=", matriz_correlacao.loc[coluna_a, coluna_b])
 
 
 # ===============================================================
@@ -280,6 +288,14 @@ qui_quadrado, valor_p, graus_liberdade, esperado = chi2_contingency(contagem_cla
 total_registros = contagem_classe_trecho.to_numpy().sum() # to_numpy e sum somam todas as celulas da tabela
 menor_dimensao = min(contagem_classe_trecho.shape) - 1 # o min(contagem_classe_trecho.shape) pega a menor dimensão da tabela, ou seja, o menor número de linhas ou colunas. O -1 é necessário pq o coeficiente de Cramer é calculado com base no menor número de categorias menos 1.
 v_de_cramer = (qui_quadrado / (total_registros * menor_dimensao)) ** 0.5 # formula do coeficiente de Cramer, que é uma medida de associação entre duas variáveis categóricas. Ele varia de 0 a 1, onde 0 indica nenhuma associação e 1 indica associação perfeita. No nosso caso deu 0,15 logo a diferença é pequena mas existente.
+
+print("\nQuantidade de registros por trecho e classe:")
+print(contagem_classe_trecho)
+print("\nPercentual de cada classe dentro do trecho (%):")
+print(percentual_classe_trecho)
+print("\nTeste qui-quadrado (classe x trecho):")
+print("Qui-quadrado:", round(qui_quadrado, 1), "| graus de liberdade:", graus_liberdade, "| p-valor:", valor_p)
+print("V de Cramér:", round(v_de_cramer, 2)) # perto de 0 = pouca associação, perto de 1 = associação forte
 
 
 # ===============================================================
