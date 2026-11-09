@@ -4,8 +4,10 @@
 # IMPORTS
 # ===============================================================
 import os
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder
 
 
 # ===============================================================
@@ -159,4 +161,62 @@ eixos[1].set_ylabel("Atropelamentos por segmento")
 eixos[1].tick_params(axis="x", rotation=0)
 plt.tight_layout()
 plt.savefig(os.path.join(pasta_graficos, "regressao_segmento_periodo.png"), dpi=120)
+plt.close()
+
+
+# ===============================================================
+# PASSO 4: BASE DO MULTICLASSE (CLASSE TAXONÔMICA)
+# ===============================================================
+# aqui cada linha continua sendo um atropelamento, e o alvo é a classe (birds, mammals, reptiles, amphibians)
+# registros sem classe identificada não têm alvo, então saem da base
+base_multiclasse = tabela[tabela["classe"] != "nao_identificado"].copy().reset_index(drop=True) # reset_index(drop=True) renumera as linhas de 0 em diante
+print("\nRegistros removidos por classe nao_identificado:", len(tabela) - len(base_multiclasse))
+print("Registros na base do multiclasse:", len(base_multiclasse))
+
+# --- atributos de mês ---
+# codificação cíclica: o mês vira um ponto num círculo (seno e cosseno), assim dezembro (12) fica perto de janeiro (1)
+# se o mês entrasse como número de 1 a 12, o modelo entenderia que dezembro e janeiro são os mais distantes
+base_multiclasse["mes_numero"] = base_multiclasse["data"].dt.month
+base_multiclasse["mes_sin"] = np.sin(2 * np.pi * base_multiclasse["mes_numero"] / 12)
+base_multiclasse["mes_cos"] = np.cos(2 * np.pi * base_multiclasse["mes_numero"] / 12)
+
+# estação chuvosa do Cerrado (DF): outubro a abril = 1, seca de maio a setembro = 0
+base_multiclasse["estacao_chuvosa"] = base_multiclasse["mes_numero"].isin([10, 11, 12, 1, 2, 3, 4]).astype(int)
+
+# --- por que o dia da semana não entra ---
+# os percursos só aconteceram de segunda a sexta (não há registro no fim de semana), então fim_de_semana seria sempre 0
+# e o dia da semana mostra a agenda dos percursos, não quando o animal morreu (o percurso de segunda recolhe os atropelamentos do fim de semana)
+print("\nRegistros por dia da semana do percurso (0 = segunda, 6 = domingo):")
+print(base_multiclasse["data"].dt.dayofweek.value_counts().sort_index())
+
+# --- por que o ano não entra ---
+# na divisão temporal o teste é 2014-2015, anos que o modelo nunca viu no treino; o ano funcionaria como o próprio corte da divisão
+# e não ajudaria a prever a classe de um atropelamento futuro
+
+# --- alvo ---
+# o LabelEncoder transforma o texto da classe em número (0, 1, 2, 3)
+# pode ser usado aqui porque é a SAÍDA do modelo; nos atributos de entrada ele criaria uma ordem falsa entre categorias
+codificador_classe = LabelEncoder()
+base_multiclasse["classe_codigo"] = codificador_classe.fit_transform(base_multiclasse["classe"])
+print("\nCódigo de cada classe:", dict(zip(codificador_classe.classes_, range(len(codificador_classe.classes_)))))
+
+print("\nDistribuição do alvo do multiclasse:")
+print(pd.DataFrame({
+    "quantidade": base_multiclasse["classe"].value_counts(),
+    "percentual": (base_multiclasse["classe"].value_counts(normalize=True) * 100).round(1),
+}))
+
+atributos_multiclasse = ["x", "y", "trecho_pela_localizacao", "mes_sin", "mes_cos", "estacao_chuvosa"]
+print("\nAtributos de entrada do multiclasse:", atributos_multiclasse)
+
+# gráfico: percentual de cada classe em cada mês, mostra se o mês ajuda a distinguir as classes
+percentual_classe_mes = pd.crosstab(base_multiclasse["mes_numero"], base_multiclasse["classe"], normalize="index") * 100
+percentual_classe_mes.plot(kind="bar", stacked=True, figsize=(10, 5), width=0.85)
+plt.title("Composição das classes em cada mês")
+plt.xlabel("Mês")
+plt.ylabel("Percentual dos atropelamentos do mês")
+plt.xticks(rotation=0)
+plt.legend(title="classe", bbox_to_anchor=(1.01, 1), loc="upper left") # bbox_to_anchor coloca a legenda fora do gráfico, à direita
+plt.tight_layout()
+plt.savefig(os.path.join(pasta_graficos, "classes_por_mes.png"), dpi=120)
 plt.close()
