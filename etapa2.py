@@ -109,3 +109,54 @@ plt.axis("equal")
 plt.tight_layout()
 plt.savefig(os.path.join(pasta_graficos, "hotspots_segmentos.png"), dpi=120)
 plt.close()
+
+
+# ===============================================================
+# PASSO 3: TABELA SEGMENTO x PERÍODO (REGRESSÃO)
+# ===============================================================
+# cada linha passa a ser um segmento em um período de monitoramento (abril a março)
+# o alvo da regressão é quantos atropelamentos o segmento teve naquele período
+# o período só organiza as linhas e depois divide treino/validação/teste; ele não entra como atributo de entrada
+
+# conferência: os zeros só fazem sentido se todos os trechos foram percorridos em todos os períodos
+print("\nRegistros por trecho e período (todos precisam ter registros nos 5 períodos):")
+print(pd.crosstab(tabela["trecho_pela_localizacao"], tabela["periodo_monitoramento"]))
+
+# monta todas as combinações segmento x período: 293 segmentos x 5 períodos
+lista_segmentos = segmentos["segmento"]
+lista_periodos = sorted(tabela["periodo_monitoramento"].unique())
+todas_combinacoes = pd.MultiIndex.from_product([lista_segmentos, lista_periodos], names=["segmento", "periodo_monitoramento"]) # from_product cria todos os pares possíveis entre as duas listas
+
+# conta os atropelamentos de cada par que aparece na tabela, e reindex completa os pares que não aparecem com 0
+contagem = tabela.groupby(["segmento", "periodo_monitoramento"]).size()
+segmento_periodo = contagem.reindex(todas_combinacoes, fill_value=0).rename("atropelamentos").reset_index()
+
+# traz as informações fixas de cada segmento (centro e trecho) da tabela do passo 2
+segmento_periodo = segmento_periodo.merge(segmentos[["segmento", "centro_x", "centro_y", "trecho"]], on="segmento") # merge junta as duas tabelas pela coluna segmento
+
+print("\nLinhas da tabela segmento x período:", len(segmento_periodo), "(", len(lista_segmentos), "segmentos x", len(lista_periodos), "períodos )")
+print("Total de atropelamentos conferido:", segmento_periodo["atropelamentos"].sum(), "de", len(tabela)) # precisa bater com o total de registros
+
+print("\nEstatísticas do alvo da regressão (atropelamentos por segmento e período):")
+print(segmento_periodo["atropelamentos"].describe().round(2))
+
+quantidade_zeros = (segmento_periodo["atropelamentos"] == 0).sum()
+print("\nLinhas com 0 atropelamentos:", quantidade_zeros, f"({quantidade_zeros / len(segmento_periodo) * 100:.1f}%)")
+
+print("\nMédia de atropelamentos por segmento em cada período:")
+print(segmento_periodo.groupby("periodo_monitoramento")["atropelamentos"].mean().round(2))
+
+# gráficos: distribuição do alvo e média por período
+figura, eixos = plt.subplots(1, 2, figsize=(13, 4))
+segmento_periodo["atropelamentos"].plot(kind="hist", bins=30, ax=eixos[0], color="steelblue")
+eixos[0].set_title("Atropelamentos por segmento e período")
+eixos[0].set_xlabel("Atropelamentos no segmento no período")
+eixos[0].set_ylabel("Quantidade de linhas")
+segmento_periodo.groupby("periodo_monitoramento")["atropelamentos"].mean().plot(kind="bar", ax=eixos[1], color="steelblue")
+eixos[1].set_title("Média por segmento em cada período")
+eixos[1].set_xlabel("Período de monitoramento (abril a março)")
+eixos[1].set_ylabel("Atropelamentos por segmento")
+eixos[1].tick_params(axis="x", rotation=0)
+plt.tight_layout()
+plt.savefig(os.path.join(pasta_graficos, "regressao_segmento_periodo.png"), dpi=120)
+plt.close()
