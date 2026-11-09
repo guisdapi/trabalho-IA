@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split, StratifiedGroupKFold
 
 
 # ===============================================================
@@ -19,6 +20,13 @@ mes_inicio_periodo = 4           # cada período de monitoramento vai de abril a
 tamanho_segmento = 500           # metros, o mesmo da etapa 1
 percentil_hotspot = 0.75         # segmentos com contagem >= P75 são hotspot
 pasta_graficos = "graficosE2"
+semente = 42                     # fixa os sorteios, para todo o grupo obter as mesmas divisões
+proporcao_validacao = 0.15
+proporcao_teste = 0.15
+tamanho_bloco_espacial = 3000    # metros, blocos de 3 km (6 segmentos) usados na divisão espacial
+periodos_treino = [1, 2, 3]      # divisão temporal: abr/2010 a mar/2013
+periodos_validacao = [4]         # abr/2013 a mar/2014
+periodos_teste = [5]             # abr/2014 a mar/2015
 
 os.chdir(os.path.dirname(os.path.abspath(__file__))) # faz os caminhos relativos partirem da pasta do script
 os.makedirs(pasta_graficos, exist_ok=True) # cria a pasta dos gráficos da etapa 2 se ela não existir
@@ -220,3 +228,98 @@ plt.legend(title="classe", bbox_to_anchor=(1.01, 1), loc="upper left") # bbox_to
 plt.tight_layout()
 plt.savefig(os.path.join(pasta_graficos, "classes_por_mes.png"), dpi=120)
 plt.close()
+
+
+# ===============================================================
+# PASSO 5: DIVISÃO EM TREINO, VALIDAÇÃO E TESTE
+# ===============================================================
+# treino = onde o modelo aprende | validação = onde escolhemos os hiperparâmetros | teste = avaliação final, só usado no fim
+# cada problema recebe uma coluna por tipo de divisão, com o texto "treino", "validacao" ou "teste" em cada linha
+
+def dividir_aleatorio(tabela_problema, coluna_estratificar=None):
+    # sorteia as linhas em 70/15/15; stratify mantém a proporção do alvo igual nas três partes
+    indices = np.arange(len(tabela_problema))
+    estratos = tabela_problema[coluna_estratificar].to_numpy() if coluna_estratificar else None
+    indices_resto, indices_teste = train_test_split(indices, test_size=proporcao_teste, stratify=estratos, random_state=semente)
+
+    # a validação é 15% do total, mas o sorteio agora é feito sobre os 85% que sobraram: 0.15 / 0.85 = 0.176
+    proporcao_val_no_resto = proporcao_validacao / (1 - proporcao_teste)
+    estratos_resto = estratos[indices_resto] if coluna_estratificar else None
+    indices_treino, indices_validacao = train_test_split(indices_resto, test_size=proporcao_val_no_resto, stratify=estratos_resto, random_state=semente)
+
+    particao = np.empty(len(tabela_problema), dtype=object) # cria uma coluna vazia e preenche cada parte
+    particao[indices_treino] = "treino"
+    particao[indices_validacao] = "validacao"
+    particao[indices_teste] = "teste"
+    return particao
+
+
+def dividir_temporal(tabela_problema):
+    # a parte depende só do período de monitoramento
+    return np.select(
+        [tabela_problema["periodo_monitoramento"].isin(periodos_treino),
+         tabela_problema["periodo_monitoramento"].isin(periodos_validacao),
+         tabela_problema["periodo_monitoramento"].isin(periodos_teste)],
+        ["treino", "validacao", "teste"],
+        default="fora", # nenhum registro cai aqui, porque todos estão nos períodos 1 a 5
+    ) # np.select escolhe o valor da primeira condição verdadeira de cada linha
+
+
+def resumir_divisao(tabela_problema, coluna_particao, coluna_alvo, alvo_e_classe=True):
+    print(f"\n  {coluna_particao}:")
+    quantidade = tabela_problema[coluna_particao].value_counts().reindex(["treino", "validacao", "teste"])
+    resumo = pd.DataFrame({"linhas": quantidade, "% das linhas": (quantidade / len(tabela_problema) * 100).round(1)})
+    if alvo_e_classe:
+        # percentual de cada classe dentro de cada parte: o ideal é ficar parecido nas três
+        percentual_alvo = (pd.crosstab(tabela_problema[coluna_particao], tabela_problema[coluna_alvo], normalize="index") * 100).round(1)
+        resumo = resumo.join(percentual_alvo)
+    else:
+        resumo["média do alvo"] = tabela_problema.groupby(coluna_particao)[coluna_alvo].mean().round(2)
+        resumo["% de zeros"] = (tabela_problema.groupby(coluna_particao)[coluna_alvo].apply(lambda valores: (valores == 0).mean()) * 100).round(1)
+    print(resumo.to_string())
+
+
+# --- divisão espacial (a mesma para os três problemas) ---
+# o mapa é dividido em blocos de 3 km, e cada bloco vai INTEIRO para treino, validação ou teste
+# assim o teste fica em trechos de rodovia que o modelo nunca viu, e um segmento de teste não tem o vizinho do lado no treino
+# o sorteio é feito uma vez na tabela de segmentos e depois copiado para os outros problemas pelo segmento,
+# então as regiões de teste são as mesmas no hotspot, no multiclasse e na regressão
+segmentos["bloco_espacial"] = (
+    (segmentos["centro_x"] // tamanho_bloco_espacial).astype(int).astype(str) + "_"
+    + (segmentos["centro_y"] // tamanho_bloco_espacial).astype(int).astype(str)
+)
+print("\nBlocos espaciais de", tamanho_bloco_espacial, "m:", segmentos["bloco_espacial"].nunique())
+
+# StratifiedGroupKFold separa os blocos em 7 grupos (cada um com ~1/7 = 14% dos segmentos),
+# tentando manter em cada grupo a mesma proporção de hotspots; o grupo 0 vira teste, o 1 validação e o resto treino
+separador_espacial = StratifiedGroupKFold(n_splits=7, shuffle=True, random_state=semente)
+grupo_do_segmento = np.empty(len(segmentos), dtype=int)
+for numero_grupo, (_, indices_grupo) in enumerate(separador_espacial.split(segmentos, segmentos["hotspot"], groups=segmentos["bloco_espacial"])):
+    grupo_do_segmento[indices_grupo] = numero_grupo
+segmentos["particao_espacial"] = np.select([grupo_do_segmento == 0, grupo_do_segmento == 1], ["teste", "validacao"], default="treino")
+
+# --- aplica as divisões em cada problema ---
+segmentos["particao_aleatoria"] = dividir_aleatorio(segmentos, "hotspot")
+# o hotspot não tem divisão temporal: cada segmento soma os 5 períodos, então não existe um "período" para separar
+
+base_multiclasse["particao_aleatoria"] = dividir_aleatorio(base_multiclasse, "classe")
+base_multiclasse = base_multiclasse.merge(segmentos[["segmento", "particao_espacial"]], on="segmento") # copia a parte espacial do segmento de cada registro
+base_multiclasse["particao_temporal"] = dividir_temporal(base_multiclasse)
+
+segmento_periodo["particao_aleatoria"] = dividir_aleatorio(segmento_periodo)
+# na aleatória o mesmo segmento aparece em períodos diferentes no treino e no teste: é o vazamento que vamos discutir
+segmento_periodo = segmento_periodo.merge(segmentos[["segmento", "particao_espacial"]], on="segmento")
+segmento_periodo["particao_temporal"] = dividir_temporal(segmento_periodo)
+
+# --- conferência das divisões ---
+print("\nHOTSPOT (binária) - linhas e % de cada classe (0 = baixo risco, 1 = hotspot) em cada parte:")
+for coluna_particao in ["particao_aleatoria", "particao_espacial"]:
+    resumir_divisao(segmentos, coluna_particao, "hotspot")
+
+print("\nMULTICLASSE - linhas e % de cada classe em cada parte:")
+for coluna_particao in ["particao_aleatoria", "particao_espacial", "particao_temporal"]:
+    resumir_divisao(base_multiclasse, coluna_particao, "classe")
+
+print("\nREGRESSÃO - linhas, média de atropelamentos e % de zeros em cada parte:")
+for coluna_particao in ["particao_aleatoria", "particao_espacial", "particao_temporal"]:
+    resumir_divisao(segmento_periodo, coluna_particao, "atropelamentos", alvo_e_classe=False)
