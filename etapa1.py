@@ -15,6 +15,9 @@ from scipy.stats import chi2_contingency  # o teste de qui-quadrado é usado par
 caminho_arquivo = "data/rodofauna.xlsx"
 tamanho_segmento = 500  # metros
 
+os.chdir(os.path.dirname(os.path.abspath(__file__))) # faz os caminhos relativos (data/, graficosE1/) partirem da pasta do script, de onde quer que ele seja executado
+os.makedirs("graficosE1", exist_ok=True) # cria a pasta dos gráficos se ela não existir (o savefig não cria pasta sozinho)
+
 
 # ===============================================================
 # FUNÇÕES
