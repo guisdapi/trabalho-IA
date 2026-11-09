@@ -3,6 +3,7 @@
 # ===============================================================
 # IMPORTS
 # ===============================================================
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import chi2_contingency  # o teste de qui-quadrado é usado para verificar se há associação entre duas variáveis categóricas. Ele compara a distribuição observada com a distribuição esperada se as variáveis fossem independentes. O resultado inclui o valor do qui-quadrado, o valor-p, os graus de liberdade e a tabela de frequências esperadas.
@@ -293,3 +294,19 @@ for minimo_registros in [5, 10, 30, 50]:
     registros_cobertos = registros_por_especie[registros_por_especie >= minimo_registros].sum()
     print("Espécies com pelo menos", minimo_registros, "registros:", especies_com_minimo,
           "(cobrem", registros_cobertos, "registros)")
+
+
+# ===============================================================
+# PASSO 12: SALVAR A TABELA NOVA PARA O PRÉ-PROCESSAMENTO (ETAPA 2)
+# ===============================================================
+# salva a tabela silvestre, já sem duplicados, com as colunas criadas na etapa 1:
+# data, mes_numero, dia_semana_numero, trecho_pela_localizacao, celula_x, celula_y e segmento
+caminho_saida = "data/rodofauna_etapa1.csv"
+os.makedirs(os.path.dirname(caminho_saida), exist_ok=True) # cria a pasta se ela não existir
+
+tabela_saida = tabela_silvestre.copy()
+tabela_saida["data"] = tabela_saida["data"].dt.strftime("%Y-%m-%d") # grava a data no formato ano-mes-dia, que o pandas lê sem ambiguidade
+tabela_saida.to_csv(caminho_saida, index=False, encoding="utf-8-sig") # index=False não grava a coluna de índice; utf-8-sig mantém os acentos ao abrir no Excel
+
+print("\nTabela salva em", caminho_saida, "com", len(tabela_saida), "registros e", tabela_saida.shape[1], "colunas")
+print("Colunas:", list(tabela_saida.columns))
