@@ -1,0 +1,21 @@
+
+# Dados gerados pelas etapas
+data/rodofauna_etapa1.csv
+data/etapa2/
+
+# Gráficos gerados
+graficosE1/
+graficosE2/
+
+# Arquivos Python temporários
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Ambientes virtuais
+venv/
+.venv/
+
+# Arquivos temporários e do sistema
+.DS_Store
+Thumbs.db
