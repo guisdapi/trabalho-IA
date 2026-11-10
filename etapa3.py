@@ -48,68 +48,57 @@ os.chdir(os.path.dirname(os.path.abspath(__file__))) # faz os caminhos relativos
 # ===============================================================
 # FUNÇÕES
 # ===============================================================
-def carregar_conjunto(nome_arquivo):
-    # abre um dos arquivos .joblib da etapa 2; ele é um dicionário com X_treino, y_treino, ..., nomes_atributos, classes e preprocessador
-    caminho = os.path.join(pasta_conjuntos, nome_arquivo)
-    conjunto = joblib.load(caminho)
-    print("\nConjunto carregado:", caminho)
-    return conjunto
-
-
-def conferir_conjunto(conjunto):
-    # serve para qualquer um dos 5 conjuntos (hotspot ou multiclasse), porque todos têm as mesmas chaves
-
-    # --- conferência 1: tamanhos ---
-    # X é a tabela de entrada (linhas x colunas) e y é o alvo (uma resposta por linha); os dois precisam ter o mesmo número de linhas
-    total_linhas = sum(len(conjunto["y_" + parte]) for parte in partes)
-    print("\nTamanho de cada parte:")
-    for parte in partes:
-        linhas_X, colunas_X = conjunto["X_" + parte].shape # .shape devolve (linhas, colunas)
-        linhas_y = len(conjunto["y_" + parte])
-        situacao = "ok" if linhas_X == linhas_y else "ERRO: X e y com tamanhos diferentes"
-        print(f"  {parte}: {linhas_X} linhas ({linhas_X / total_linhas * 100:.1f}%), {colunas_X} colunas | y: {linhas_y} respostas -> {situacao}")
-
-    # --- conferência 2: atributos de entrada ---
-    # os nomes vêm do ColumnTransformer da etapa 2: "numericas__" = padronizada, "categoricas__" = coluna do One-Hot, "binarias__" = passou sem alteração
-    print("\nAtributos de entrada:", len(conjunto["nomes_atributos"]))
-    for nome in conjunto["nomes_atributos"]:
-        print("  ", nome)
-
-    # --- conferência 3: valores faltando ---
-    # a rede não aceita células vazias (NaN); se aparecer algum, o treino dá erro ou a loss vira "nan"
-    print("\nCélulas vazias (NaN) em cada parte:")
-    for parte in partes:
-        print(f"  {parte}:", int(np.isnan(conjunto["X_" + parte]).sum())) # isnan marca as células vazias e sum conta quantas são
-
-    # --- conferência 4: códigos das classes ---
-    # o alvo está em números; a lista "classes" diz qual nome corresponde a cada número (posição 0 = código 0, ...)
-    print("\nCódigo de cada classe:", {codigo: nome for codigo, nome in enumerate(conjunto["classes"])})
-    print("Códigos que aparecem no alvo de cada parte:")
-    for parte in partes:
-        print(f"  {parte}:", sorted(np.unique(conjunto["y_" + parte]).tolist())) # np.unique devolve os valores distintos
-
-    # --- conferência 5: distribuição das classes em cada parte ---
-    # o ideal é que a proporção de cada classe fique parecida no treino, na validação e no teste
-    quantidade = pd.DataFrame({parte: pd.Series(conjunto["y_" + parte]).value_counts() for parte in partes}).fillna(0).astype(int) # fillna(0): classe que não aparece numa parte fica com 0
-    quantidade = quantidade.sort_index() # ordena pelo código da classe
-    quantidade.index = [conjunto["classes"][codigo] for codigo in quantidade.index] # troca o código pelo nome da classe
-    percentual = (quantidade / quantidade.sum() * 100).round(1) # divide cada coluna pelo total da própria parte
-
-    print("\nQuantidade de cada classe em cada parte:")
-    print(quantidade.to_string())
-    print("\nPercentual de cada classe em cada parte (%):")
-    print(percentual.to_string())
+def avaliar_multiclasse(y_real, y_previsto):
+    # calcula as métricas do multiclasse pedidas no enunciado; a mesma função vai avaliar a linha de base, a MLP e o Random Forest
+    # average="macro": calcula a métrica de cada classe e tira a média simples, então anfíbios (classe rara) pesam igual a aves
+    # zero_division=0: se o modelo nunca prevê uma classe, a precision dela fica 0 em vez de dar aviso (acontece com a linha de base)
+    return {
+        "accuracy": accuracy_score(y_real, y_previsto),
+        "precision_macro": precision_score(y_real, y_previsto, average="macro", zero_division=0),
+        "recall_macro": recall_score(y_real, y_previsto, average="macro", zero_division=0),
+        "f1_macro": f1_score(y_real, y_previsto, average="macro", zero_division=0),
+    }
 
 
 # ===============================================================
-# PASSO 1: CARREGAR O CONJUNTO DA ETAPA 2 E CONFERIR
+# PASSO 1: CARREGAR O CONJUNTO DA ETAPA 2
 # ===============================================================
 # começamos pelo multiclasse com divisão aleatória (mais dados e divisão mais simples)
-# os outros conjuntos (multiclasse espacial/temporal e hotspot aleatória/espacial) usam as mesmas funções depois
-conjunto = carregar_conjunto("multiclasse_aleatoria.joblib")
-conferir_conjunto(conjunto)
+# o .joblib é um dicionário com X_treino, y_treino, ..., nomes_atributos, classes e preprocessador, salvo no passo 7 da etapa 2
+caminho_conjunto = os.path.join(pasta_conjuntos, "multiclasse_aleatoria.joblib")
+conjunto = joblib.load(caminho_conjunto)
 
 # separa as peças em variáveis com nomes curtos, para usar nos próximos passos
 X_treino, X_validacao, X_teste = conjunto["X_treino"], conjunto["X_validacao"], conjunto["X_teste"]
 y_treino, y_validacao, y_teste = conjunto["y_treino"], conjunto["y_validacao"], conjunto["y_teste"]
 nomes_classes = conjunto["classes"]
+
+# conferência rápida: os tamanhos precisam bater com o final da etapa 2, e a rede vai receber X_treino.shape[1] entradas
+print("Conjunto carregado:", caminho_conjunto)
+print(f"Treino {X_treino.shape} | validação {X_validacao.shape} | teste {X_teste.shape}  (linhas, colunas)")
+print("Código de cada classe:", dict(enumerate(nomes_classes))) # enumerate numera a lista: 0 = primeira classe, 1 = segunda, ...
+
+
+# ===============================================================
+# PASSO 2: LINHA DE BASE (CHUTAR SEMPRE A CLASSE MAIS COMUM)
+# ===============================================================
+# a linha de base é a nota mínima: qualquer modelo que aprende alguma coisa precisa ficar acima dela
+# o DummyClassifier com strategy="most_frequent" olha só o y_treino, descobre a classe mais comum e passa a prever ela para TODA linha
+# ele recebe o X só por obrigação do scikit-learn, mas ignora completamente os atributos
+linha_de_base = DummyClassifier(strategy="most_frequent")
+linha_de_base.fit(X_treino, y_treino)
+
+classe_chutada = nomes_classes[linha_de_base.predict(X_treino[:1])[0]] # prevê uma linha qualquer só para descobrir qual classe ele sempre chuta
+print("\nA linha de base prevê sempre:", classe_chutada)
+
+# avalia na validação (referência para ajustar a MLP) e no teste (referência para a tabela final de comparação)
+# não há vazamento em avaliar no teste aqui, porque a linha de base não tem nada para ajustar
+resultados_linha_de_base = pd.DataFrame({
+    "validacao": avaliar_multiclasse(y_validacao, linha_de_base.predict(X_validacao)),
+    "teste": avaliar_multiclasse(y_teste, linha_de_base.predict(X_teste)),
+}).round(3)
+
+print("\nMétricas da linha de base:")
+print(resultados_linha_de_base.to_string())
+# leitura esperada: a accuracy fica igual ao % da classe mais comum, mas o recall macro fica em 0,25 (acerta 100% de uma classe e 0% das outras 3)
+# e o F1 macro fica bem baixo; isso mostra por que a accuracy sozinha engana quando as classes são desbalanceadas
