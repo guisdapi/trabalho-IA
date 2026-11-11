@@ -6,6 +6,7 @@ data/etapa2/
 # Gráficos gerados
 graficosE1/
 graficosE2/
+graficosE3/
 
 # Arquivos Python temporários
 __pycache__/
