@@ -491,3 +491,84 @@ caminho_importancia = os.path.join(pasta_graficos, f"importancia_atributos_rf_{n
 plt.savefig(caminho_importancia, dpi=120)
 plt.close()
 print("Gráfico salvo:", caminho_importancia)
+
+
+# ===============================================================
+# PASSO 9: COMPARAÇÃO FINAL MLP x RANDOM FOREST
+# ===============================================================
+# o enunciado pede para discutir: desempenho, capacidade de generalização, sensibilidade ao pré-processamento,
+# custo computacional e facilidade de interpretação; este passo junta os números que faltavam numa tabela só
+# (a interpretação já foi coberta no passo 8, com a importância dos atributos)
+
+# --- sensibilidade ao pré-processamento: treinar os dois modelos SEM a padronização ---
+# os conjuntos da etapa 2 já vêm padronizados, então desfazemos a padronização só das colunas numéricas
+# o StandardScaler ajustado na etapa 2 está guardado dentro do preprocessador, e inverse_transform faz a conta ao contrário
+# as colunas numéricas são as primeiras do X (ordem do ColumnTransformer: numéricas, categóricas, binárias)
+padronizador = conjunto["preprocessador"].named_transformers_["numericas"] # pega o StandardScaler pelo nome dado na etapa 2
+quantidade_numericas = len(padronizador.mean_) # uma média guardada por coluna numérica (x, y, mes_sin, mes_cos)
+
+def desfazer_padronizacao(X):
+    X_original = X.copy() # copia para não estragar o X padronizado, que ainda é usado
+    X_original[:, :quantidade_numericas] = padronizador.inverse_transform(X[:, :quantidade_numericas]) # [:, :4] = todas as linhas, 4 primeiras colunas
+    return X_original
+
+X_treino_sem, X_validacao_sem, X_teste_sem = desfazer_padronizacao(X_treino), desfazer_padronizacao(X_validacao), desfazer_padronizacao(X_teste)
+print("\nExemplo de x e y sem padronização (primeira linha do treino):", X_treino_sem[0, :2].round(0)) # devem voltar às coordenadas UTM em metros
+
+# MLP sem padronização: mesma arquitetura e mesmo treino, só muda a entrada
+# a função treinar_mlp usa X_treino e X_validacao; trocamos os dois temporariamente e depois devolvemos os originais
+X_treino_padronizado, X_validacao_padronizado = X_treino, X_validacao
+X_treino, X_validacao = X_treino_sem, X_validacao_sem
+print(f"\nTreinando a MLP {arquitetura_escolhida} SEM padronização...")
+resultado_mlp_sem = treinar_mlp(resultado_escolhido["neuronios"])
+X_treino, X_validacao = X_treino_padronizado, X_validacao_padronizado # volta aos dados padronizados
+f1_mlp_sem = f1_score(y_teste, prever_classes(resultado_mlp_sem["modelo"], X_teste_sem, numero_classes), average="macro", zero_division=0)
+
+# Random Forest sem padronização: mesmos parâmetros escolhidos no passo 8
+rf_sem = RandomForestClassifier(n_estimators=300, class_weight="balanced", random_state=semente, n_jobs=-1, **parametros_rf_escolhidos)
+rf_sem.fit(X_treino_sem, y_treino)
+f1_rf_sem = f1_score(y_teste, rf_sem.predict(X_teste_sem), average="macro", zero_division=0)
+# esperado: o RF dá praticamente o mesmo resultado (as árvores só comparam valores, a escala não importa)
+# e a MLP piora bastante (x e y na casa das centenas de milhares dominam as contas e atrapalham o ajuste dos pesos)
+
+# --- custo computacional: tempo de previsão (o tempo de treino já foi medido nos passos 6 e 8) ---
+inicio = time.perf_counter()
+prever_classes(mlp, X_teste, numero_classes)
+tempo_previsao_mlp = time.perf_counter() - inicio
+inicio = time.perf_counter()
+rf.predict(X_teste)
+tempo_previsao_rf = time.perf_counter() - inicio
+
+# --- tabela final ---
+# f1_macro_treino x f1_macro_teste: quanto maior a diferença, mais o modelo decorou o treino (pior generalização)
+comparacao_final = pd.DataFrame({
+    "mlp_" + arquitetura_escolhida: {
+        "accuracy_teste": resultados_teste.loc["accuracy", "mlp_" + arquitetura_escolhida],
+        "f1_macro_teste": resultados_teste.loc["f1_macro", "mlp_" + arquitetura_escolhida],
+        "f1_macro_treino": f1_score(y_treino, prever_classes(mlp, X_treino, numero_classes), average="macro"),
+        "f1_macro_teste_sem_padronizacao": f1_mlp_sem,
+        "tempo_treino_s": tempo_treino_mlp,
+        "tempo_previsao_teste_ms": tempo_previsao_mlp * 1000,
+    },
+    "random_forest": {
+        "accuracy_teste": resultados_teste.loc["accuracy", "random_forest"],
+        "f1_macro_teste": resultados_teste.loc["f1_macro", "random_forest"],
+        "f1_macro_treino": f1_score(y_treino, rf.predict(X_treino), average="macro"),
+        "f1_macro_teste_sem_padronizacao": f1_rf_sem,
+        "tempo_treino_s": tempo_treino_rf,
+        "tempo_previsao_teste_ms": tempo_previsao_rf * 1000,
+    },
+}).round(3)
+comparacao_final.loc["diferenca_treino_teste"] = (comparacao_final.loc["f1_macro_treino"] - comparacao_final.loc["f1_macro_teste"]).round(3)
+
+print(f"\nComparação final MLP x Random Forest ({nome_conjunto}):")
+print(comparacao_final.to_string())
+
+# salva as tabelas do teste e da comparação, para o relatório não depender da saída do terminal
+pasta_resultados = "resultadosE3"
+os.makedirs(pasta_resultados, exist_ok=True)
+resultados_teste.to_csv(os.path.join(pasta_resultados, f"metricas_teste_{nome_conjunto}.csv"), encoding="utf-8-sig")
+comparacao_final.to_csv(os.path.join(pasta_resultados, f"comparacao_final_{nome_conjunto}.csv"), encoding="utf-8-sig")
+comparacao_arquiteturas.to_csv(os.path.join(pasta_resultados, f"arquiteturas_mlp_{nome_conjunto}.csv"), index=False, encoding="utf-8-sig")
+comparacao_rf.to_csv(os.path.join(pasta_resultados, f"parametros_rf_{nome_conjunto}.csv"), index=False, encoding="utf-8-sig")
+print("\nTabelas salvas em", pasta_resultados)
