@@ -89,14 +89,15 @@ linha_de_base = DummyClassifier(strategy="most_frequent") # linha de base = semp
 linha_de_base.fit(X_treino, y_treino) # .fit() significa "treinar", mas a linha de base não aprende nada, só descobre a classe mais comum do treino
 
 classe_chutada = nomes_classes[linha_de_base.predict(X_treino[:1])[0]] # prevê uma linha qualquer só para descobrir qual classe ele sempre chuta
+# .predict retorna um array de classes previstas, então pegamos a primeira linha do treino ([:1]) e o primeiro elemento do array ([0])
 print("\nA linha de base prevê sempre:", classe_chutada)
 
 # avalia na validação (referência para ajustar a MLP) e no teste (referência para a tabela final de comparação)
 # não há vazamento em avaliar no teste aqui, porque a linha de base não tem nada para ajustar
 resultados_linha_de_base = pd.DataFrame({
-    "validacao": avaliar_multiclasse(y_validacao, linha_de_base.predict(X_validacao)),
-    "teste": avaliar_multiclasse(y_teste, linha_de_base.predict(X_teste)),
-}).round(3)
+    "validacao": avaliar_multiclasse(y_validacao, linha_de_base.predict(X_validacao)), # avaliar
+    "teste": avaliar_multiclasse(y_teste, linha_de_base.predict(X_teste)), 
+}).round(3) # arredonda para 3 casas decimais, para a tabela ficar mais legível
 
 print("\nMétricas da linha de base:")
 print(resultados_linha_de_base.to_string())
