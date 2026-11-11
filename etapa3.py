@@ -333,3 +333,59 @@ resultado_escolhido = resultados_arquiteturas[arquitetura_escolhida]
 mlp = resultado_escolhido["modelo"]  # a rede que segue para a avaliação no teste (passo 7)
 tempo_treino_mlp = resultado_escolhido["tempo"]
 print(f"\nArquitetura escolhida: {arquitetura_escolhida} (melhor F1 macro na validação: {melhor_f1:.3f}; tolerância de desempate: {tolerancia_desempate})")
+
+
+# ===============================================================
+# PASSO 7: AVALIAR A MLP ESCOLHIDA NO TESTE (UMA ÚNICA VEZ)
+# ===============================================================
+# todas as escolhas (pesos, arquitetura, época) já foram feitas com treino e validação
+# a partir daqui nada mais é ajustado: o teste só MEDE o desempenho em dados que a rede nunca viu
+# se mudássemos a rede depois de olhar o teste, ele viraria uma segunda validação e o resultado ficaria otimista
+y_previsto_teste = prever_classes(mlp, X_teste, numero_classes)
+
+# --- métricas gerais: MLP x linha de base ---
+resultados_teste = pd.DataFrame({
+    "linha_de_base": resultados_linha_de_base["teste"], # calculada no passo 2
+    "mlp_" + arquitetura_escolhida: avaliar_multiclasse(y_teste, y_previsto_teste),
+}).round(3)
+print("\nMétricas no TESTE:")
+print(resultados_teste.to_string())
+# a comparação principal é pelo F1 macro: a accuracy da linha de base já parece razoável sem ela aprender nada (passo 2)
+
+# --- métricas por classe ---
+# precision: das vezes que a rede disse "essa classe", quantas estavam certas
+# recall: dos animais que realmente eram dessa classe, quantos a rede encontrou
+# support: quantos animais de cada classe existem no teste (classes com support pequeno têm métricas instáveis)
+# macro avg = média simples das classes | weighted avg = média ponderada pelo support (favorece as classes grandes)
+print("\nMétricas por classe no teste:")
+print(classification_report(y_teste, y_previsto_teste, labels=list(range(numero_classes)), target_names=nomes_classes, digits=3, zero_division=0))
+
+# --- matriz de confusão ---
+# linha = classe real, coluna = classe prevista; a diagonal são os acertos, fora dela são as confusões
+matriz = confusion_matrix(y_teste, y_previsto_teste, labels=list(range(numero_classes)))
+print("Matriz de confusão (linhas = real, colunas = previsto):")
+print(pd.DataFrame(matriz, index=["real_" + nome for nome in nomes_classes], columns=["prev_" + nome for nome in nomes_classes]).to_string())
+
+# gráfico com duas versões da matriz:
+# esquerda: quantidade de animais | direita: % de cada classe REAL (cada linha soma 100%; a diagonal é o recall de cada classe)
+# a versão em % é a mais justa para comparar classes de tamanhos diferentes (10 anfíbios x 300 aves)
+figura, eixos = plt.subplots(1, 2, figsize=(14, 5.5))
+ConfusionMatrixDisplay.from_predictions(
+    y_teste, y_previsto_teste, labels=list(range(numero_classes)), display_labels=nomes_classes,
+    cmap="Blues", ax=eixos[0], colorbar=False,
+)
+eixos[0].set_title("Quantidade")
+ConfusionMatrixDisplay.from_predictions(
+    y_teste, y_previsto_teste, labels=list(range(numero_classes)), display_labels=nomes_classes,
+    normalize="true", values_format=".0%", cmap="Blues", ax=eixos[1], colorbar=False, # normalize="true": divide cada linha pelo total da classe real
+)
+eixos[1].set_title("% de cada classe real (diagonal = recall)")
+for eixo in eixos:
+    eixo.set_xlabel("Classe prevista")
+    eixo.set_ylabel("Classe real")
+figura.suptitle(f"Matriz de confusão da MLP {arquitetura_escolhida} no teste - {nome_conjunto}")
+plt.tight_layout()
+caminho_matriz = os.path.join(pasta_graficos, f"matriz_confusao_mlp_{nome_conjunto}.png")
+plt.savefig(caminho_matriz, dpi=120)
+plt.close()
+print("\nGráfico salvo:", caminho_matriz)
