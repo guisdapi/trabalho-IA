@@ -85,8 +85,8 @@ print("Código de cada classe:", dict(enumerate(nomes_classes))) # enumerate num
 # a linha de base é a nota mínima: qualquer modelo que aprende alguma coisa precisa ficar acima dela
 # o DummyClassifier com strategy="most_frequent" olha só o y_treino, descobre a classe mais comum e passa a prever ela para TODA linha
 # ele recebe o X só por obrigação do scikit-learn, mas ignora completamente os atributos
-linha_de_base = DummyClassifier(strategy="most_frequent")
-linha_de_base.fit(X_treino, y_treino)
+linha_de_base = DummyClassifier(strategy="most_frequent") # linha de base = sempre chutar a classe mais comum do treino, que seria a classe 0 (aves) nesse conjunto
+linha_de_base.fit(X_treino, y_treino) # .fit() significa "treinar", mas a linha de base não aprende nada, só descobre a classe mais comum do treino
 
 classe_chutada = nomes_classes[linha_de_base.predict(X_treino[:1])[0]] # prevê uma linha qualquer só para descobrir qual classe ele sempre chuta
 print("\nA linha de base prevê sempre:", classe_chutada)
