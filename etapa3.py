@@ -389,3 +389,105 @@ caminho_matriz = os.path.join(pasta_graficos, f"matriz_confusao_mlp_{nome_conjun
 plt.savefig(caminho_matriz, dpi=120)
 plt.close()
 print("\nGráfico salvo:", caminho_matriz)
+
+
+# ===============================================================
+# PASSO 8: RANDOM FOREST (MODELO TRADICIONAL PARA COMPARAÇÃO)
+# ===============================================================
+# o Random Forest usa EXATAMENTE os mesmos X_treino, X_validacao e X_teste da MLP (o enunciado exige as mesmas divisões)
+# os dados estão padronizados por causa da MLP, mas isso não muda nada para as árvores:
+# uma árvore só pergunta "x é maior que tal valor?", e a resposta é a mesma com ou sem padronização
+#
+# como funciona: o RF cria muitas árvores de decisão, cada uma treinada com um sorteio diferente das linhas e dos atributos;
+# na previsão, cada árvore vota em uma classe e vence a mais votada
+#
+# class_weight="balanced": o mesmo tratamento do desbalanceamento usado na MLP (passo 3), para a comparação ser justa
+# n_jobs=-1: usa todos os núcleos do processador (o TensorFlow também usa), então os tempos de treino ficam comparáveis
+
+# --- ajuste leve pela validação (mesma ideia do passo 6) ---
+# max_depth: quantas perguntas seguidas cada árvore pode fazer (None = sem limite, até separar tudo)
+# min_samples_leaf: quantos animais, no mínimo, cada "folha" (resposta final da árvore) precisa ter
+# os dois controlam o quanto a árvore pode decorar o treino: árvore funda e folha pequena decoram mais
+candidatos_rf = [
+    {"max_depth": None, "min_samples_leaf": 1},  # padrão do scikit-learn (árvores totalmente livres)
+    {"max_depth": None, "min_samples_leaf": 5},
+    {"max_depth": 15, "min_samples_leaf": 1},
+    {"max_depth": 15, "min_samples_leaf": 5},
+]
+
+linhas_rf = []
+modelos_rf = []
+for parametros in candidatos_rf:
+    floresta = RandomForestClassifier(n_estimators=300, class_weight="balanced", random_state=semente, n_jobs=-1, **parametros) # **parametros "abre" o dicionário como argumentos
+    inicio = time.perf_counter()
+    floresta.fit(X_treino, y_treino)
+    tempo = time.perf_counter() - inicio
+    metricas_validacao = avaliar_multiclasse(y_validacao, floresta.predict(X_validacao))
+    modelos_rf.append((floresta, tempo))
+    linhas_rf.append({
+        "max_depth": "sem limite" if parametros["max_depth"] is None else parametros["max_depth"],
+        "min_samples_leaf": parametros["min_samples_leaf"],
+        "tempo_s": round(tempo, 2),
+        "treino_f1_macro": round(f1_score(y_treino, floresta.predict(X_treino), average="macro"), 3), # mostra o quanto ele decorou o treino
+        "val_accuracy": round(metricas_validacao["accuracy"], 3),
+        "val_f1_macro": round(metricas_validacao["f1_macro"], 3),
+    })
+
+comparacao_rf = pd.DataFrame(linhas_rf)
+print("\nRandom Forest - comparação dos parâmetros na validação:")
+print(comparacao_rf.to_string(index=False))
+# treino_f1_macro perto de 1 com val_f1_macro bem menor = a floresta decorou o treino (overfitting)
+
+posicao_escolhida = int(comparacao_rf["val_f1_macro"].idxmax()) # idxmax devolve a linha com o maior F1 macro na validação
+rf, tempo_treino_rf = modelos_rf[posicao_escolhida]
+parametros_rf_escolhidos = candidatos_rf[posicao_escolhida]
+print("\nParâmetros escolhidos para o Random Forest:", parametros_rf_escolhidos)
+
+# --- avaliação no teste (uma única vez, igual à MLP) ---
+y_previsto_teste_rf = rf.predict(X_teste) # o RF já devolve o código da classe, sem precisar converter probabilidades
+resultados_teste["random_forest"] = pd.Series(avaliar_multiclasse(y_teste, y_previsto_teste_rf)).round(3) # nova coluna na tabela do passo 7
+print("\nMétricas no TESTE (linha de base x MLP x Random Forest):")
+print(resultados_teste.to_string())
+
+print("\nMétricas por classe do Random Forest no teste:")
+print(classification_report(y_teste, y_previsto_teste_rf, labels=list(range(numero_classes)), target_names=nomes_classes, digits=3, zero_division=0))
+
+# matriz de confusão do RF, no mesmo formato da MLP (passo 7), para comparar as duas lado a lado no relatório
+figura, eixos = plt.subplots(1, 2, figsize=(14, 5.5))
+ConfusionMatrixDisplay.from_predictions(
+    y_teste, y_previsto_teste_rf, labels=list(range(numero_classes)), display_labels=nomes_classes,
+    cmap="Greens", ax=eixos[0], colorbar=False,
+)
+eixos[0].set_title("Quantidade")
+ConfusionMatrixDisplay.from_predictions(
+    y_teste, y_previsto_teste_rf, labels=list(range(numero_classes)), display_labels=nomes_classes,
+    normalize="true", values_format=".0%", cmap="Greens", ax=eixos[1], colorbar=False,
+)
+eixos[1].set_title("% de cada classe real (diagonal = recall)")
+for eixo in eixos:
+    eixo.set_xlabel("Classe prevista")
+    eixo.set_ylabel("Classe real")
+figura.suptitle(f"Matriz de confusão do Random Forest no teste - {nome_conjunto}")
+plt.tight_layout()
+caminho_matriz_rf = os.path.join(pasta_graficos, f"matriz_confusao_rf_{nome_conjunto}.png")
+plt.savefig(caminho_matriz_rf, dpi=120)
+plt.close()
+print("Gráfico salvo:", caminho_matriz_rf)
+
+# --- importância dos atributos (a vantagem de interpretação do RF) ---
+# mede o quanto cada atributo ajudou as árvores a separar as classes; a soma de todos dá 1
+# cuidado na leitura: esse cálculo tende a favorecer atributos com muitos valores diferentes (x e y)
+# em relação a atributos 0/1 (trecho, estação chuvosa); vale citar essa limitação no relatório
+nomes_atributos_curtos = [nome.split("__")[1] for nome in conjunto["nomes_atributos"]] # "numericas__x" -> "x"
+importancias = pd.Series(rf.feature_importances_, index=nomes_atributos_curtos).sort_values()
+print("\nImportância dos atributos no Random Forest:")
+print(importancias.sort_values(ascending=False).round(3).to_string())
+
+importancias.plot(kind="barh", color="seagreen", figsize=(8, 4.5)) # barh = barras horizontais, mais fácil de ler nomes longos
+plt.title(f"Importância dos atributos - Random Forest ({nome_conjunto})")
+plt.xlabel("Importância")
+plt.tight_layout()
+caminho_importancia = os.path.join(pasta_graficos, f"importancia_atributos_rf_{nome_conjunto}.png")
+plt.savefig(caminho_importancia, dpi=120)
+plt.close()
+print("Gráfico salvo:", caminho_importancia)
