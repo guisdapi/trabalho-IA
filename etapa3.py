@@ -51,7 +51,10 @@ tamanho_batch = 32                    # quantas linhas a rede vê antes de cada 
 epocas_maximas = 300                  # limite de épocas; na prática o treino para antes, pela parada antecipada (passo 5)
 paciencia = 20                        # quantas épocas seguidas sem melhora na validação a parada antecipada tolera antes de parar
 
+pasta_graficos = "graficosE3"
+
 os.chdir(os.path.dirname(os.path.abspath(__file__))) # faz os caminhos relativos partirem da pasta do script, igual às etapas 1 e 2
+os.makedirs(pasta_graficos, exist_ok=True) # cria a pasta dos gráficos da etapa 3 se ela não existir
 
 
 # ===============================================================
@@ -114,7 +117,8 @@ def montar_mlp(numero_entradas, numero_classes):
 # ===============================================================
 # começamos pelo multiclasse com divisão aleatória (mais dados e divisão mais simples)
 # o .joblib é um dicionário com X_treino, y_treino, ..., nomes_atributos, classes e preprocessador, salvo no passo 7 da etapa 2
-caminho_conjunto = os.path.join(pasta_conjuntos, "multiclasse_aleatoria.joblib")
+nome_conjunto = "multiclasse_aleatoria" # também usado no nome dos gráficos, para não misturar quando rodarmos as outras divisões
+caminho_conjunto = os.path.join(pasta_conjuntos, nome_conjunto + ".joblib")
 conjunto = joblib.load(caminho_conjunto)
 
 # separa as peças em variáveis com nomes curtos, para usar nos próximos passos
@@ -201,3 +205,58 @@ parada_antecipada = keras.callbacks.EarlyStopping(
     restore_best_weights=True,
     verbose=1, # avisa no terminal em qual época parou
 )
+
+
+# ===============================================================
+# PASSO 5: TREINAR A MLP E GERAR AS CURVAS DE TREINAMENTO
+# ===============================================================
+# o class_weight do Keras só é aplicado na loss do TREINO; a loss da validação seria calculada sem pesos
+# aí as duas curvas ficariam em escalas diferentes e não daria para compará-las no gráfico
+# por isso a validação recebe os mesmos pesos, linha a linha (sample_weight): cada linha ganha o peso da sua classe
+# assim as duas losses medem a mesma coisa, e a parada antecipada escolhe a época pensando em todas as classes, inclusive as raras
+# (as métricas accuracy e F1 não usam esses pesos: elas continuam sendo a accuracy e o F1 de verdade)
+pesos_linhas_validacao = np.array([pesos_classes[codigo] for codigo in y_validacao])
+
+inicio = time.perf_counter() # marca o horário de início, para medir o custo computacional
+historico = mlp.fit(
+    X_treino, y_treino_rede,
+    validation_data=(X_validacao, y_validacao_rede, pesos_linhas_validacao), # avaliada no fim de cada época; NÃO é usada para ajustar os pesos
+    epochs=epocas_maximas,
+    batch_size=tamanho_batch,
+    class_weight=pesos_classes,
+    callbacks=[parada_antecipada],
+    shuffle=True, # embaralha a ordem das linhas a cada época, para os batches não serem sempre os mesmos
+    verbose=0,    # 0 = não imprime nada durante o treino; troque para 2 se quiser ver uma linha por época
+)
+tempo_treino_mlp = time.perf_counter() - inicio
+
+# historico.history é um dicionário com uma lista por medida, um valor por época:
+# loss, accuracy, f1_macro (treino) e val_loss, val_accuracy, val_f1_macro (validação)
+curvas = historico.history
+epocas_treinadas = len(curvas["loss"])
+melhor_epoca = int(np.argmin(curvas["val_loss"])) + 1 # argmin devolve a posição da menor loss de validação; +1 porque as épocas começam em 1
+
+print(f"\nTreino da MLP: {epocas_treinadas} épocas em {tempo_treino_mlp:.1f} s")
+print("Melhor época (menor loss de validação):", melhor_epoca, "-> a rede ficou com os pesos dessa época")
+print("\nMedidas na melhor época:")
+print(pd.DataFrame({
+    "treino": [curvas["loss"][melhor_epoca - 1], curvas["accuracy"][melhor_epoca - 1], curvas["f1_macro"][melhor_epoca - 1]],
+    "validacao": [curvas["val_loss"][melhor_epoca - 1], curvas["val_accuracy"][melhor_epoca - 1], curvas["val_f1_macro"][melhor_epoca - 1]],
+}, index=["loss", "accuracy", "f1_macro"]).round(3).to_string())
+
+# gráfico: à esquerda a loss, à direita o F1 macro (a métrica principal); treino x validação em cada um
+# a linha tracejada marca a melhor época; depois dela, o treino continuou só para a parada antecipada confirmar que não havia melhora
+epocas = range(1, epocas_treinadas + 1)
+figura, eixos = plt.subplots(1, 2, figsize=(13, 4.5))
+for eixo, medida, titulo in [(eixos[0], "loss", "Loss (entropia cruzada com pesos)"), (eixos[1], "f1_macro", "F1 macro")]:
+    eixo.plot(epocas, curvas[medida], color="steelblue", label="treino")
+    eixo.plot(epocas, curvas["val_" + medida], color="orange", label="validação")
+    eixo.axvline(melhor_epoca, color="gray", linestyle="--", label=f"melhor época ({melhor_epoca})") # axvline desenha uma linha vertical
+    eixo.set_title(titulo)
+    eixo.set_xlabel("Época")
+    eixo.legend()
+figura.suptitle(f"Curvas de treinamento da MLP - {nome_conjunto}") # título geral acima dos dois gráficos
+plt.tight_layout()
+plt.savefig(os.path.join(pasta_graficos, f"curvas_mlp_{nome_conjunto}.png"), dpi=120)
+plt.close()
+print("\nGráfico salvo:", os.path.join(pasta_graficos, f"curvas_mlp_{nome_conjunto}.png"))
