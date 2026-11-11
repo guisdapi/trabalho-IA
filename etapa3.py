@@ -46,6 +46,8 @@ semente = 42  # a mesma da etapa 2: fixa os sorteios (pesos iniciais da rede, or
 
 # hiperparâmetros da MLP (ponto de partida; a otimização com Optuna fica para a etapa 5)
 neuronios_camadas_ocultas = [32, 16]  # 2 camadas ocultas, com 32 e 16 neurônios; cada número da lista é uma camada
+arquiteturas_candidatas = [[16, 8], [32, 16], [64, 32]]  # passo 6: rede menor, a inicial e uma maior, comparadas na validação
+tolerancia_desempate = 0.01          # passo 6: se outra rede ficar a menos de 0,01 do melhor F1 macro, preferimos a que tem menos parâmetros
 taxa_aprendizado = 0.001              # tamanho do passo de cada ajuste dos pesos (valor padrão do Adam)
 tamanho_batch = 32                    # quantas linhas a rede vê antes de cada ajuste dos pesos (usado no treino, passo 5)
 epocas_maximas = 300                  # limite de épocas; na prática o treino para antes, pela parada antecipada (passo 5)
@@ -82,13 +84,13 @@ def preparar_alvo_para_rede(y, numero_classes):
     return keras.utils.to_categorical(y, numero_classes)
 
 
-def montar_mlp(numero_entradas, numero_classes):
+def montar_mlp(numero_entradas, numero_classes, neuronios_camadas):
     # monta e configura a rede; serve para o multiclasse e para o hotspot (binária), muda só a camada de saída e a loss
     modelo = keras.Sequential(name="mlp")
     modelo.add(keras.Input(shape=(numero_entradas,), name="entrada")) # camada de entrada: 1 neurônio por atributo
 
     # camadas ocultas: Dense = cada neurônio se liga a todos os neurônios da camada anterior
-    for numero_camada, neuronios in enumerate(neuronios_camadas_ocultas, start=1):
+    for numero_camada, neuronios in enumerate(neuronios_camadas, start=1):
         modelo.add(keras.layers.Dense(neuronios, activation="relu", name=f"oculta_{numero_camada}"))
 
     if numero_classes == 2:
@@ -110,6 +112,78 @@ def montar_mlp(numero_entradas, numero_classes):
         metrics=["accuracy", f1],
     )
     return modelo
+
+
+def treinar_mlp(neuronios_camadas):
+    # monta uma rede com os neurônios pedidos e treina com os dados do conjunto carregado
+    # usa as variáveis criadas nos passos 3 e 4 (X_treino, y_treino_rede, pesos_classes, ...)
+    keras.utils.set_random_seed(semente) # a mesma semente para toda rede: as diferenças entre elas vêm da arquitetura, não do sorteio
+    modelo = montar_mlp(numero_entradas, numero_classes, neuronios_camadas)
+
+    # parada antecipada: a cada época olha a loss da validação; se ela passar "paciencia" épocas sem melhorar, o treino para
+    # restore_best_weights=True: no fim, a rede volta aos pesos da época com a menor loss de validação (e não aos da última época)
+    # monitoramos a loss (e não o F1) porque ela varia de forma mais suave e mede também a confiança das respostas
+    parada_antecipada = keras.callbacks.EarlyStopping(monitor="val_loss", patience=paciencia, restore_best_weights=True)
+
+    inicio = time.perf_counter() # marca o horário de início, para medir o custo computacional
+    historico = modelo.fit(
+        X_treino, y_treino_rede,
+        validation_data=(X_validacao, y_validacao_rede, pesos_linhas_validacao), # avaliada no fim de cada época; NÃO é usada para ajustar os pesos
+        epochs=epocas_maximas,
+        batch_size=tamanho_batch,
+        class_weight=pesos_classes,
+        callbacks=[parada_antecipada],
+        shuffle=True, # embaralha a ordem das linhas a cada época, para os batches não serem sempre os mesmos
+        verbose=0,    # 0 = não imprime nada durante o treino; troque para 2 se quiser ver uma linha por época
+    )
+    tempo = time.perf_counter() - inicio
+
+    # historico.history é um dicionário com uma lista por medida, um valor por época:
+    # loss, accuracy, f1_macro (treino) e val_loss, val_accuracy, val_f1_macro (validação)
+    curvas = historico.history
+    return {
+        "neuronios": neuronios_camadas,
+        "modelo": modelo,
+        "curvas": curvas,
+        "epocas_treinadas": len(curvas["loss"]),
+        "melhor_epoca": int(np.argmin(curvas["val_loss"])) + 1, # posição da menor loss de validação; +1 porque as épocas começam em 1
+        "tempo": tempo,
+    }
+
+
+def prever_classes(modelo, X, numero_classes):
+    # a rede devolve probabilidades; aqui elas viram a classe prevista
+    # chama a rede direto (em vez de modelo.predict), o que evita um aviso de "retracing" do TensorFlow quando várias redes são avaliadas seguidas
+    probabilidades = np.asarray(modelo(X, training=False)) # training=False: modo de previsão
+    if numero_classes == 2:
+        return (probabilidades[:, 0] >= 0.5).astype(int) # binária: hotspot quando a probabilidade passa de 0,5
+    return probabilidades.argmax(axis=1) # multiclasse: argmax devolve a posição (código) da maior probabilidade de cada linha
+
+
+def nome_arquitetura(neuronios_camadas):
+    return "-".join(str(neuronios) for neuronios in neuronios_camadas) # [32, 16] -> "32-16", usado em tabelas e nomes de arquivo
+
+
+def desenhar_curvas(resultado):
+    # à esquerda a loss, à direita o F1 macro (a métrica principal); treino x validação em cada um
+    # a linha tracejada marca a melhor época; depois dela, o treino continuou só para a parada antecipada confirmar que não havia melhora
+    curvas, melhor_epoca = resultado["curvas"], resultado["melhor_epoca"]
+    epocas = range(1, resultado["epocas_treinadas"] + 1)
+    figura, eixos = plt.subplots(1, 2, figsize=(13, 4.5))
+    for eixo, medida, titulo in [(eixos[0], "loss", "Loss (entropia cruzada com pesos)"), (eixos[1], "f1_macro", "F1 macro")]:
+        eixo.plot(epocas, curvas[medida], color="steelblue", label="treino")
+        eixo.plot(epocas, curvas["val_" + medida], color="orange", label="validação")
+        eixo.axvline(melhor_epoca, color="gray", linestyle="--", label=f"melhor época ({melhor_epoca})") # axvline desenha uma linha vertical
+        eixo.set_title(titulo)
+        eixo.set_xlabel("Época")
+        eixo.legend()
+    arquitetura = nome_arquitetura(resultado["neuronios"])
+    figura.suptitle(f"Curvas de treinamento da MLP {arquitetura} - {nome_conjunto}") # título geral acima dos dois gráficos
+    plt.tight_layout()
+    caminho = os.path.join(pasta_graficos, f"curvas_mlp_{nome_conjunto}_{arquitetura}.png")
+    plt.savefig(caminho, dpi=120)
+    plt.close()
+    print("Gráfico salvo:", caminho)
 
 
 # ===============================================================
@@ -178,12 +252,8 @@ print(pd.DataFrame({
 
 
 # ===============================================================
-# PASSO 4: MONTAR E CONFIGURAR A MLP
+# PASSO 4: PREPARAR OS DADOS PARA A REDE E MOSTRAR A ARQUITETURA
 # ===============================================================
-# fixa a semente do Python, do NumPy e do TensorFlow de uma vez; precisa vir ANTES de montar a rede,
-# porque os pesos iniciais dos neurônios são sorteados no momento em que as camadas são criadas
-keras.utils.set_random_seed(semente)
-
 numero_entradas = X_treino.shape[1]  # 8 atributos -> 8 entradas
 numero_classes = len(nomes_classes)  # 4 classes -> 4 saídas
 
@@ -192,24 +262,6 @@ numero_classes = len(nomes_classes)  # 4 classes -> 4 saídas
 y_treino_rede = preparar_alvo_para_rede(y_treino, numero_classes)
 y_validacao_rede = preparar_alvo_para_rede(y_validacao, numero_classes)
 
-mlp = montar_mlp(numero_entradas, numero_classes)
-print()
-mlp.summary() # mostra as camadas, o formato da saída de cada uma e quantos pesos (parâmetros) a rede tem para ajustar
-
-# parada antecipada: a cada época olha a loss da validação; se ela passar "paciencia" épocas sem melhorar, o treino para
-# restore_best_weights=True: no fim, a rede volta aos pesos da época com a menor loss de validação (e não aos da última época)
-# monitoramos a loss (e não o F1) porque ela varia de forma mais suave e mede também a confiança das respostas
-parada_antecipada = keras.callbacks.EarlyStopping(
-    monitor="val_loss",
-    patience=paciencia,
-    restore_best_weights=True,
-    verbose=1, # avisa no terminal em qual época parou
-)
-
-
-# ===============================================================
-# PASSO 5: TREINAR A MLP E GERAR AS CURVAS DE TREINAMENTO
-# ===============================================================
 # o class_weight do Keras só é aplicado na loss do TREINO; a loss da validação seria calculada sem pesos
 # aí as duas curvas ficariam em escalas diferentes e não daria para compará-las no gráfico
 # por isso a validação recebe os mesmos pesos, linha a linha (sample_weight): cada linha ganha o peso da sua classe
@@ -217,46 +269,67 @@ parada_antecipada = keras.callbacks.EarlyStopping(
 # (as métricas accuracy e F1 não usam esses pesos: elas continuam sendo a accuracy e o F1 de verdade)
 pesos_linhas_validacao = np.array([pesos_classes[codigo] for codigo in y_validacao])
 
-inicio = time.perf_counter() # marca o horário de início, para medir o custo computacional
-historico = mlp.fit(
-    X_treino, y_treino_rede,
-    validation_data=(X_validacao, y_validacao_rede, pesos_linhas_validacao), # avaliada no fim de cada época; NÃO é usada para ajustar os pesos
-    epochs=epocas_maximas,
-    batch_size=tamanho_batch,
-    class_weight=pesos_classes,
-    callbacks=[parada_antecipada],
-    shuffle=True, # embaralha a ordem das linhas a cada época, para os batches não serem sempre os mesmos
-    verbose=0,    # 0 = não imprime nada durante o treino; troque para 2 se quiser ver uma linha por época
-)
-tempo_treino_mlp = time.perf_counter() - inicio
+# mostra as camadas da arquitetura inicial e quantos pesos (parâmetros) ela tem para ajustar
+# (essa rede é só para o resumo; quem monta e treina de verdade é a função treinar_mlp, nos passos 5 e 6)
+print()
+montar_mlp(numero_entradas, numero_classes, neuronios_camadas_ocultas).summary()
 
-# historico.history é um dicionário com uma lista por medida, um valor por época:
-# loss, accuracy, f1_macro (treino) e val_loss, val_accuracy, val_f1_macro (validação)
-curvas = historico.history
-epocas_treinadas = len(curvas["loss"])
-melhor_epoca = int(np.argmin(curvas["val_loss"])) + 1 # argmin devolve a posição da menor loss de validação; +1 porque as épocas começam em 1
 
-print(f"\nTreino da MLP: {epocas_treinadas} épocas em {tempo_treino_mlp:.1f} s")
+# ===============================================================
+# PASSO 5: TREINAR A MLP INICIAL E GERAR AS CURVAS DE TREINAMENTO
+# ===============================================================
+resultado_inicial = treinar_mlp(neuronios_camadas_ocultas)
+curvas, melhor_epoca = resultado_inicial["curvas"], resultado_inicial["melhor_epoca"]
+
+print(f"\nTreino da MLP {nome_arquitetura(neuronios_camadas_ocultas)}: {resultado_inicial['epocas_treinadas']} épocas em {resultado_inicial['tempo']:.1f} s")
 print("Melhor época (menor loss de validação):", melhor_epoca, "-> a rede ficou com os pesos dessa época")
 print("\nMedidas na melhor época:")
 print(pd.DataFrame({
     "treino": [curvas["loss"][melhor_epoca - 1], curvas["accuracy"][melhor_epoca - 1], curvas["f1_macro"][melhor_epoca - 1]],
     "validacao": [curvas["val_loss"][melhor_epoca - 1], curvas["val_accuracy"][melhor_epoca - 1], curvas["val_f1_macro"][melhor_epoca - 1]],
 }, index=["loss", "accuracy", "f1_macro"]).round(3).to_string())
+desenhar_curvas(resultado_inicial)
 
-# gráfico: à esquerda a loss, à direita o F1 macro (a métrica principal); treino x validação em cada um
-# a linha tracejada marca a melhor época; depois dela, o treino continuou só para a parada antecipada confirmar que não havia melhora
-epocas = range(1, epocas_treinadas + 1)
-figura, eixos = plt.subplots(1, 2, figsize=(13, 4.5))
-for eixo, medida, titulo in [(eixos[0], "loss", "Loss (entropia cruzada com pesos)"), (eixos[1], "f1_macro", "F1 macro")]:
-    eixo.plot(epocas, curvas[medida], color="steelblue", label="treino")
-    eixo.plot(epocas, curvas["val_" + medida], color="orange", label="validação")
-    eixo.axvline(melhor_epoca, color="gray", linestyle="--", label=f"melhor época ({melhor_epoca})") # axvline desenha uma linha vertical
-    eixo.set_title(titulo)
-    eixo.set_xlabel("Época")
-    eixo.legend()
-figura.suptitle(f"Curvas de treinamento da MLP - {nome_conjunto}") # título geral acima dos dois gráficos
-plt.tight_layout()
-plt.savefig(os.path.join(pasta_graficos, f"curvas_mlp_{nome_conjunto}.png"), dpi=120)
-plt.close()
-print("\nGráfico salvo:", os.path.join(pasta_graficos, f"curvas_mlp_{nome_conjunto}.png"))
+
+# ===============================================================
+# PASSO 6: AJUSTE LEVE - COMPARAR ARQUITETURAS NA VALIDAÇÃO
+# ===============================================================
+# testa uma rede menor e uma maior que a inicial; a escolha usa SÓ a validação (o teste continua guardado para o passo 7)
+# a busca completa de hiperparâmetros fica para a etapa 5 (Optuna); aqui o objetivo é justificar o número de neurônios
+resultados_arquiteturas = {nome_arquitetura(neuronios_camadas_ocultas): resultado_inicial} # a inicial já foi treinada no passo 5
+for neuronios_camadas in arquiteturas_candidatas:
+    arquitetura = nome_arquitetura(neuronios_camadas)
+    if arquitetura not in resultados_arquiteturas: # não treina de novo a que já existe
+        print(f"\nTreinando a MLP {arquitetura}...")
+        resultados_arquiteturas[arquitetura] = treinar_mlp(neuronios_camadas)
+        desenhar_curvas(resultados_arquiteturas[arquitetura])
+
+# tabela de comparação: o F1 macro é calculado com o scikit-learn, igual será no teste e no Random Forest
+linhas_comparacao = []
+for arquitetura, resultado in resultados_arquiteturas.items():
+    metricas_validacao = avaliar_multiclasse(y_validacao, prever_classes(resultado["modelo"], X_validacao, numero_classes))
+    linhas_comparacao.append({
+        "arquitetura": arquitetura,
+        "parametros": resultado["modelo"].count_params(), # quantos pesos a rede ajusta
+        "epocas": resultado["epocas_treinadas"],
+        "melhor_epoca": resultado["melhor_epoca"],
+        "tempo_s": round(resultado["tempo"], 1),
+        "val_loss": round(min(resultado["curvas"]["val_loss"]), 3),
+        "val_accuracy": round(metricas_validacao["accuracy"], 3),
+        "val_f1_macro": round(metricas_validacao["f1_macro"], 3),
+    })
+comparacao_arquiteturas = pd.DataFrame(linhas_comparacao).sort_values("parametros") # da menor para a maior rede
+print("\nComparação das arquiteturas na validação:")
+print(comparacao_arquiteturas.to_string(index=False))
+
+# regra de escolha: maior F1 macro na validação
+# desempate: se uma rede menor ficar a menos de "tolerancia_desempate" do melhor F1, ela é escolhida
+# (diferença tão pequena pode ser só sorte do sorteio; com desempenho igual, a rede mais simples é preferível e decora menos)
+melhor_f1 = comparacao_arquiteturas["val_f1_macro"].max()
+quase_empatadas = comparacao_arquiteturas[comparacao_arquiteturas["val_f1_macro"] >= melhor_f1 - tolerancia_desempate]
+arquitetura_escolhida = quase_empatadas.iloc[0]["arquitetura"] # a tabela está ordenada por parâmetros, então a primeira é a menor
+
+resultado_escolhido = resultados_arquiteturas[arquitetura_escolhida]
+mlp = resultado_escolhido["modelo"]  # a rede que segue para a avaliação no teste (passo 7)
+tempo_treino_mlp = resultado_escolhido["tempo"]
+print(f"\nArquitetura escolhida: {arquitetura_escolhida} (melhor F1 macro na validação: {melhor_f1:.3f}; tolerância de desempate: {tolerancia_desempate})")
