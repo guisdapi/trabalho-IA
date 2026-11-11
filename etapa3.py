@@ -7,6 +7,7 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2" # esconde as mensagens internas do TensorFlow (avisos de CPU/GPU) que poluem o terminal; precisa vir ANTES do import do tensorflow
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0" # desliga a otimização oneDNN: os resultados ficam iguais em toda execução (com a mesma semente), o que é importante para o grupo comparar resultados; com a base pequena, a perda de velocidade é insignificante
 
+import sys   # lê o nome do conjunto digitado no terminal (python etapa3.py multiclasse_espacial)
 import time  # cronometra o treino de cada modelo, para discutir o custo computacional
 import numpy as np  # transforma as probabilidades da rede na classe prevista (a maior probabilidade, ou o corte de 0,5 no hotspot)
 import pandas as pd  # monta as tabelas de resultado (MLP x Random Forest em cada divisão)
@@ -14,7 +15,7 @@ import matplotlib.pyplot as plt  # gráficos: curvas de loss/accuracy por época
 import joblib  # abre os conjuntos prontos salvos na etapa 2 (data/etapa2/*.joblib)
 
 # rede neural (MLP)
-import tensorflow as tf  # o "motor" que faz as contas do treino; também usado para fixar a semente
+import tensorflow as tf  # o "motor" que faz as contas do treino (o Keras roda em cima dele)
 from tensorflow import keras  # a parte do TensorFlow usada para montar, treinar e parar a rede (camadas, otimizador, parada antecipada)
 
 # modelo tradicional, linha de base e pesos das classes
@@ -40,7 +41,6 @@ from sklearn.metrics import (
 # CONFIGURAÇÕES
 # ===============================================================
 pasta_conjuntos = "data/etapa2"  # onde a etapa 2 salvou os conjuntos prontos (.joblib)
-partes = ["treino", "validacao", "teste"]  # as três partes de cada conjunto, na ordem em que serão mostradas
 
 semente = 42  # a mesma da etapa 2: fixa os sorteios (pesos iniciais da rede, ordem dos batches), para todo o grupo obter o mesmo resultado
 
@@ -189,9 +189,11 @@ def desenhar_curvas(resultado):
 # ===============================================================
 # PASSO 1: CARREGAR O CONJUNTO DA ETAPA 2
 # ===============================================================
-# começamos pelo multiclasse com divisão aleatória (mais dados e divisão mais simples)
 # o .joblib é um dicionário com X_treino, y_treino, ..., nomes_atributos, classes e preprocessador, salvo no passo 7 da etapa 2
-nome_conjunto = "multiclasse_aleatoria" # também usado no nome dos gráficos, para não misturar quando rodarmos as outras divisões
+# o nome do conjunto pode ser escolhido no terminal: python etapa3.py multiclasse_espacial
+# sys.argv é a lista do que foi digitado no comando: [0] = nome do script, [1] = o que vem depois dele
+# sem nada depois do nome do script, usa a divisão aleatória
+nome_conjunto = sys.argv[1] if len(sys.argv) > 1 else "multiclasse_aleatoria" # também vai no nome dos gráficos e tabelas, para as divisões não se misturarem
 caminho_conjunto = os.path.join(pasta_conjuntos, nome_conjunto + ".joblib")
 conjunto = joblib.load(caminho_conjunto)
 
@@ -267,7 +269,8 @@ y_validacao_rede = preparar_alvo_para_rede(y_validacao, numero_classes)
 # por isso a validação recebe os mesmos pesos, linha a linha (sample_weight): cada linha ganha o peso da sua classe
 # assim as duas losses medem a mesma coisa, e a parada antecipada escolhe a época pensando em todas as classes, inclusive as raras
 # (as métricas accuracy e F1 não usam esses pesos: elas continuam sendo a accuracy e o F1 de verdade)
-pesos_linhas_validacao = np.array([pesos_classes[codigo] for codigo in y_validacao])
+# .get(codigo, 1.0): se uma classe aparecer na validação mas não no treino (pode acontecer nas divisões espacial/temporal), ela recebe peso 1 em vez de dar erro
+pesos_linhas_validacao = np.array([pesos_classes.get(codigo, 1.0) for codigo in y_validacao])
 
 # mostra as camadas da arquitetura inicial e quantos pesos (parâmetros) ela tem para ajustar
 # (essa rede é só para o resumo; quem monta e treina de verdade é a função treinar_mlp, nos passos 5 e 6)
