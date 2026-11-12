@@ -1,13 +1,13 @@
 # 3 etapa IA - Comparação das divisões (generalização)
-# roda DEPOIS do etapa3.py ter sido executado em todas as divisões do problema escolhido:
+# roda DEPOIS da etapa 3 ter sido executada em todas as divisões do problema escolhido:
 #   multiclasse (3 divisões):
-#     python etapa3.py multiclasse_aleatoria
-#     python etapa3.py multiclasse_espacial
-#     python etapa3.py multiclasse_temporal
+#     python etapa3_multiclasse.py aleatoria
+#     python etapa3_multiclasse.py espacial
+#     python etapa3_multiclasse.py temporal
 #     python comparar_divisoes.py multiclasse
 #   hotspot (2 divisões; não tem temporal, porque cada segmento soma os 5 períodos):
-#     python etapa3.py hotspot_aleatoria
-#     python etapa3.py hotspot_espacial
+#     python etapa3_binario.py aleatoria
+#     python etapa3_binario.py espacial
 #     python comparar_divisoes.py hotspot
 
 # ===============================================================
@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 # ===============================================================
 # CONFIGURAÇÕES
 # ===============================================================
-pasta_resultados = "resultadosE3"  # onde o etapa3.py salvou as tabelas (passo 9)
+pasta_resultados = "resultadosE3"  # onde a etapa 3 salvou as tabelas (passo 9)
 pasta_graficos = "graficosE3"
 
 # sem nada depois do nome do script, compara o multiclasse (igual era antes)
@@ -35,7 +35,7 @@ if problema not in divisoes_de_cada_problema:
     raise SystemExit("Problema desconhecido: " + problema + " (use multiclasse ou hotspot)")
 divisoes = divisoes_de_cada_problema[problema]
 
-# a mesma métrica principal do etapa3.py: F1 macro no multiclasse e F1 da classe hotspot na binária
+# a mesma métrica principal da etapa 3: F1 macro no multiclasse e F1 da classe hotspot na binária
 metrica = "f1_macro" if problema == "multiclasse" else "f1"
 titulo_metrica = "F1 macro" if problema == "multiclasse" else "F1 da classe hotspot"
 
@@ -53,7 +53,8 @@ for divisao in divisoes:
     caminho_metricas = os.path.join(pasta_resultados, f"metricas_teste_{nome_conjunto}.csv")
     caminho_comparacao = os.path.join(pasta_resultados, f"comparacao_final_{nome_conjunto}.csv")
     if not (os.path.exists(caminho_metricas) and os.path.exists(caminho_comparacao)):
-        print("Faltando resultados de", nome_conjunto, "-> rode antes: python etapa3.py", nome_conjunto)
+        script = "etapa3_multiclasse.py" if problema == "multiclasse" else "etapa3_binario.py"
+        print("Faltando resultados de", nome_conjunto, "-> rode antes: python", script, divisao)
         continue # pula essa divisão e segue com as outras
 
     metricas = pd.read_csv(caminho_metricas, index_col=0) # index_col=0: a primeira coluna (accuracy, f1_macro, ...) vira o índice
@@ -77,7 +78,7 @@ for divisao in divisoes:
     linhas.append(linha)
 
 if not linhas: # nenhuma divisão foi encontrada: não há o que comparar
-    raise SystemExit("Nenhum resultado encontrado em " + pasta_resultados + ". Rode o etapa3.py antes.")
+    raise SystemExit("Nenhum resultado encontrado em " + pasta_resultados + ". Rode a etapa 3 antes.")
 tabela = pd.DataFrame(linhas).set_index("divisao")
 
 # queda em relação à divisão aleatória: quanto o F1 cai quando o teste é numa região ou num período que o modelo nunca viu
