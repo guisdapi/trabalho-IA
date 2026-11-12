@@ -1,4 +1,7 @@
 # 3 etapa IA - Classificação com MLP
+# o mesmo script resolve os dois problemas de classificação; o nome do conjunto vem do terminal:
+#   multiclasse (classe taxonômica): python etapa3.py multiclasse_aleatoria | multiclasse_espacial | multiclasse_temporal
+#   binária (hotspot):               python etapa3.py hotspot_aleatoria | hotspot_espacial
 
 # ===============================================================
 # IMPORTS
@@ -15,8 +18,7 @@ import matplotlib.pyplot as plt  # gráficos: curvas de loss/accuracy por época
 import joblib  # abre os conjuntos prontos salvos na etapa 2 (data/etapa2/*.joblib)
 
 # rede neural (MLP)
-import tensorflow as tf  # o "motor" que faz as contas do treino (o Keras roda em cima dele)
-from tensorflow import keras  # a parte do TensorFlow usada para montar, treinar e parar a rede (camadas, otimizador, parada antecipada)
+from tensorflow import keras  # a parte do TensorFlow usada para montar, treinar e parar a rede (camadas, otimizador, parada antecipada); o TensorFlow é o "motor" que faz as contas por baixo
 
 # modelo tradicional, linha de base e pesos das classes
 from sklearn.dummy import DummyClassifier  # linha de base: "modelo" que sempre chuta a classe mais comum
@@ -29,10 +31,10 @@ from sklearn.metrics import (
     precision_score,         # dos que o modelo disse que são da classe, quantos realmente são
     recall_score,            # dos que realmente são da classe, quantos o modelo encontrou
     f1_score,                # equilíbrio entre precision e recall
-    roc_auc_score,           # ROC-AUC do hotspot (avalia todos os cortes de probabilidade)
+    roc_auc_score,           # ROC-AUC do hotspot (avalia todos os cortes de probabilidade, e não só o de 0,5)
     confusion_matrix,        # tabela de quais classes se confundem com quais
     ConfusionMatrixDisplay,  # desenha a matriz de confusão
-    RocCurveDisplay,         # desenha a curva ROC do hotspot
+    roc_curve,               # pontos da curva ROC do hotspot (taxa de falso positivo x recall em cada corte)
     classification_report,   # precision, recall e F1 de cada classe de uma vez
 )
 
@@ -62,10 +64,25 @@ os.makedirs(pasta_graficos, exist_ok=True) # cria a pasta dos gráficos da etapa
 # ===============================================================
 # FUNÇÕES
 # ===============================================================
-def avaliar_multiclasse(y_real, y_previsto):
-    # calcula as métricas do multiclasse pedidas no enunciado; a mesma função vai avaliar a linha de base, a MLP e o Random Forest
-    # average="macro": calcula a métrica de cada classe e tira a média simples, então anfíbios (classe rara) pesam igual a aves
+def avaliar(y_real, y_previsto, probabilidade_hotspot=None):
+    # calcula as métricas pedidas no enunciado; a mesma função avalia a linha de base, a MLP e o Random Forest
     # zero_division=0: se o modelo nunca prevê uma classe, a precision dela fica 0 em vez de dar aviso (acontece com a linha de base)
+    if numero_classes == 2:
+        # binária: precision, recall e F1 são calculados SÓ para a classe 1 (hotspot), que é a que interessa encontrar
+        # (average="binary" é o padrão do scikit-learn quando há duas classes)
+        metricas = {
+            "accuracy": accuracy_score(y_real, y_previsto),
+            "precision": precision_score(y_real, y_previsto, zero_division=0),
+            "recall": recall_score(y_real, y_previsto, zero_division=0),
+            "f1": f1_score(y_real, y_previsto, zero_division=0),
+        }
+        # o ROC-AUC precisa da PROBABILIDADE de hotspot (e não da classe prevista), porque testa todos os cortes possíveis
+        # 0,5 = não separa nada (igual a sortear) | 1 = todo hotspot recebeu probabilidade maior que todo segmento de baixo risco
+        if probabilidade_hotspot is not None:
+            metricas["roc_auc"] = roc_auc_score(y_real, probabilidade_hotspot)
+        return metricas
+
+    # multiclasse: average="macro" calcula a métrica de cada classe e tira a média simples, então anfíbios (classe rara) pesam igual a aves
     return {
         "accuracy": accuracy_score(y_real, y_previsto),
         "precision_macro": precision_score(y_real, y_previsto, average="macro", zero_division=0),
@@ -139,7 +156,7 @@ def treinar_mlp(neuronios_camadas):
     tempo = time.perf_counter() - inicio
 
     # historico.history é um dicionário com uma lista por medida, um valor por época:
-    # loss, accuracy, f1_macro (treino) e val_loss, val_accuracy, val_f1_macro (validação)
+    # loss, accuracy, f1_macro (treino) e val_loss, val_accuracy, val_f1_macro (validação); no hotspot é f1 e val_f1 em vez de f1_macro
     curvas = historico.history
     return {
         "neuronios": neuronios_camadas,
@@ -151,10 +168,20 @@ def treinar_mlp(neuronios_camadas):
     }
 
 
+def prever_probabilidades(modelo, X):
+    # a saída da rede: no hotspot, 1 coluna com a probabilidade de hotspot; no multiclasse, 4 colunas (uma por classe)
+    # chama a rede direto (em vez de modelo.predict), o que evita um aviso de "retracing" do TensorFlow quando várias redes são avaliadas seguidas
+    return np.asarray(modelo(X, training=False)) # training=False: modo de previsão
+
+
+def probabilidade_hotspot_mlp(modelo, X):
+    # usada no ROC-AUC: a probabilidade de hotspot de cada segmento; no multiclasse não existe, e a função devolve None
+    return prever_probabilidades(modelo, X)[:, 0] if numero_classes == 2 else None
+
+
 def prever_classes(modelo, X, numero_classes):
     # a rede devolve probabilidades; aqui elas viram a classe prevista
-    # chama a rede direto (em vez de modelo.predict), o que evita um aviso de "retracing" do TensorFlow quando várias redes são avaliadas seguidas
-    probabilidades = np.asarray(modelo(X, training=False)) # training=False: modo de previsão
+    probabilidades = prever_probabilidades(modelo, X)
     if numero_classes == 2:
         return (probabilidades[:, 0] >= 0.5).astype(int) # binária: hotspot quando a probabilidade passa de 0,5
     return probabilidades.argmax(axis=1) # multiclasse: argmax devolve a posição (código) da maior probabilidade de cada linha
@@ -170,7 +197,7 @@ def desenhar_curvas(resultado):
     curvas, melhor_epoca = resultado["curvas"], resultado["melhor_epoca"]
     epocas = range(1, resultado["epocas_treinadas"] + 1)
     figura, eixos = plt.subplots(1, 2, figsize=(13, 4.5))
-    for eixo, medida, titulo in [(eixos[0], "loss", "Loss (entropia cruzada com pesos)"), (eixos[1], "f1_macro", "F1 macro")]:
+    for eixo, medida, titulo in [(eixos[0], "loss", "Loss (entropia cruzada com pesos)"), (eixos[1], metrica_principal, titulo_metrica_principal)]:
         eixo.plot(epocas, curvas[medida], color="steelblue", label="treino")
         eixo.plot(epocas, curvas["val_" + medida], color="orange", label="validação")
         eixo.axvline(melhor_epoca, color="gray", linestyle="--", label=f"melhor época ({melhor_epoca})") # axvline desenha uma linha vertical
@@ -201,6 +228,14 @@ conjunto = joblib.load(caminho_conjunto)
 X_treino, X_validacao, X_teste = conjunto["X_treino"], conjunto["X_validacao"], conjunto["X_teste"]
 y_treino, y_validacao, y_teste = conjunto["y_treino"], conjunto["y_validacao"], conjunto["y_teste"]
 nomes_classes = conjunto["classes"]
+numero_classes = len(nomes_classes)  # 2 no hotspot (baixo_risco, hotspot), 4 no multiclasse
+
+# métrica principal de cada problema: é ela que escolhe a arquitetura da MLP, os parâmetros do RF e aparece nas curvas
+#   hotspot: F1 da classe hotspot (o objetivo é encontrar os segmentos de risco; acertar os de baixo risco é fácil, porque são 3/4 da base)
+#   multiclasse: F1 macro (todas as classes pesam igual, inclusive as raras)
+# o nome é o mesmo da métrica do Keras (montar_mlp) e da chave devolvida pela função avaliar
+metrica_principal = "f1" if numero_classes == 2 else "f1_macro"
+titulo_metrica_principal = "F1 da classe hotspot" if numero_classes == 2 else "F1 macro"
 
 # conferência rápida: os tamanhos precisam bater com o final da etapa 2, e a rede vai receber X_treino.shape[1] entradas
 print("Conjunto carregado:", caminho_conjunto)
@@ -222,15 +257,22 @@ print("\nA linha de base prevê sempre:", classe_chutada)
 
 # avalia na validação (referência para ajustar a MLP) e no teste (referência para a tabela final de comparação)
 # não há vazamento em avaliar no teste aqui, porque a linha de base não tem nada para ajustar
+def avaliar_linha_de_base(X, y):
+    # no hotspot, o ROC-AUC precisa de uma probabilidade: a linha de base dá a MESMA para todo segmento (o % de hotspots do treino)
+    probabilidade = linha_de_base.predict_proba(X)[:, 1] if numero_classes == 2 else None
+    return avaliar(y, linha_de_base.predict(X), probabilidade)
+
 resultados_linha_de_base = pd.DataFrame({
-    "validacao": avaliar_multiclasse(y_validacao, linha_de_base.predict(X_validacao)),
-    "teste": avaliar_multiclasse(y_teste, linha_de_base.predict(X_teste)),
+    "validacao": avaliar_linha_de_base(X_validacao, y_validacao),
+    "teste": avaliar_linha_de_base(X_teste, y_teste),
 }).round(3)
 
 print("\nMétricas da linha de base:")
 print(resultados_linha_de_base.to_string())
-# leitura esperada: a accuracy fica igual ao % da classe mais comum, mas o recall macro fica em 0,25 (acerta 100% de uma classe e 0% das outras 3)
+# leitura esperada no multiclasse: a accuracy fica igual ao % da classe mais comum, mas o recall macro fica em 0,25 (acerta 100% de uma classe e 0% das outras 3)
 # e o F1 macro fica bem baixo; isso mostra por que a accuracy sozinha engana quando as classes são desbalanceadas
+# no hotspot é ainda mais claro: a linha de base chuta sempre "baixo_risco", acerta ~75% (accuracy) e não encontra NENHUM hotspot
+# (precision, recall e F1 = 0); o ROC-AUC fica em 0,5, porque todo segmento recebe a mesma probabilidade
 
 
 # ===============================================================
@@ -256,11 +298,11 @@ print(pd.DataFrame({
 # ===============================================================
 # PASSO 4: PREPARAR OS DADOS PARA A REDE E MOSTRAR A ARQUITETURA
 # ===============================================================
-numero_entradas = X_treino.shape[1]  # 8 atributos -> 8 entradas
-numero_classes = len(nomes_classes)  # 4 classes -> 4 saídas
+numero_entradas = X_treino.shape[1]  # multiclasse: 8 atributos -> 8 entradas | hotspot: 5 (centro_x, centro_y e 3 colunas do trecho)
+# saídas: 4 no multiclasse (uma por classe) e 1 no hotspot (a probabilidade de hotspot); numero_classes foi definido no passo 1
 
-# o alvo de treino e de validação no formato da saída da rede (One-Hot no multiclasse)
-# o y_teste continua em código (0 a 3), porque as métricas do scikit-learn comparam códigos
+# o alvo de treino e de validação no formato da saída da rede (One-Hot no multiclasse, coluna de 0/1 no hotspot)
+# o y_teste continua em código (0 a 3, ou 0/1), porque as métricas do scikit-learn comparam códigos
 y_treino_rede = preparar_alvo_para_rede(y_treino, numero_classes)
 y_validacao_rede = preparar_alvo_para_rede(y_validacao, numero_classes)
 
@@ -288,9 +330,9 @@ print(f"\nTreino da MLP {nome_arquitetura(neuronios_camadas_ocultas)}: {resultad
 print("Melhor época (menor loss de validação):", melhor_epoca, "-> a rede ficou com os pesos dessa época")
 print("\nMedidas na melhor época:")
 print(pd.DataFrame({
-    "treino": [curvas["loss"][melhor_epoca - 1], curvas["accuracy"][melhor_epoca - 1], curvas["f1_macro"][melhor_epoca - 1]],
-    "validacao": [curvas["val_loss"][melhor_epoca - 1], curvas["val_accuracy"][melhor_epoca - 1], curvas["val_f1_macro"][melhor_epoca - 1]],
-}, index=["loss", "accuracy", "f1_macro"]).round(3).to_string())
+    "treino": [curvas["loss"][melhor_epoca - 1], curvas["accuracy"][melhor_epoca - 1], curvas[metrica_principal][melhor_epoca - 1]],
+    "validacao": [curvas["val_loss"][melhor_epoca - 1], curvas["val_accuracy"][melhor_epoca - 1], curvas["val_" + metrica_principal][melhor_epoca - 1]],
+}, index=["loss", "accuracy", metrica_principal]).round(3).to_string())
 desenhar_curvas(resultado_inicial)
 
 
@@ -307,35 +349,43 @@ for neuronios_camadas in arquiteturas_candidatas:
         resultados_arquiteturas[arquitetura] = treinar_mlp(neuronios_camadas)
         desenhar_curvas(resultados_arquiteturas[arquitetura])
 
-# tabela de comparação: o F1 macro é calculado com o scikit-learn, igual será no teste e no Random Forest
+# tabela de comparação: a métrica principal é calculada com o scikit-learn, igual será no teste e no Random Forest
 linhas_comparacao = []
 for arquitetura, resultado in resultados_arquiteturas.items():
-    metricas_validacao = avaliar_multiclasse(y_validacao, prever_classes(resultado["modelo"], X_validacao, numero_classes))
-    linhas_comparacao.append({
+    modelo_candidato = resultado["modelo"]
+    metricas_validacao = avaliar(
+        y_validacao,
+        prever_classes(modelo_candidato, X_validacao, numero_classes),
+        probabilidade_hotspot_mlp(modelo_candidato, X_validacao), # None no multiclasse
+    )
+    linha = {
         "arquitetura": arquitetura,
-        "parametros": resultado["modelo"].count_params(), # quantos pesos a rede ajusta
+        "parametros": modelo_candidato.count_params(), # quantos pesos a rede ajusta
         "epocas": resultado["epocas_treinadas"],
         "melhor_epoca": resultado["melhor_epoca"],
         "tempo_s": round(resultado["tempo"], 1),
         "val_loss": round(min(resultado["curvas"]["val_loss"]), 3),
         "val_accuracy": round(metricas_validacao["accuracy"], 3),
-        "val_f1_macro": round(metricas_validacao["f1_macro"], 3),
-    })
+        "val_" + metrica_principal: round(metricas_validacao[metrica_principal], 3),
+    }
+    if numero_classes == 2:
+        linha["val_roc_auc"] = round(metricas_validacao["roc_auc"], 3) # só informativo; a escolha continua sendo pelo F1
+    linhas_comparacao.append(linha)
 comparacao_arquiteturas = pd.DataFrame(linhas_comparacao).sort_values("parametros") # da menor para a maior rede
 print("\nComparação das arquiteturas na validação:")
 print(comparacao_arquiteturas.to_string(index=False))
 
-# regra de escolha: maior F1 macro na validação
+# regra de escolha: maior métrica principal na validação (F1 macro no multiclasse, F1 do hotspot na binária)
 # desempate: se uma rede menor ficar a menos de "tolerancia_desempate" do melhor F1, ela é escolhida
 # (diferença tão pequena pode ser só sorte do sorteio; com desempenho igual, a rede mais simples é preferível e decora menos)
-melhor_f1 = comparacao_arquiteturas["val_f1_macro"].max()
-quase_empatadas = comparacao_arquiteturas[comparacao_arquiteturas["val_f1_macro"] >= melhor_f1 - tolerancia_desempate]
+melhor_f1 = comparacao_arquiteturas["val_" + metrica_principal].max()
+quase_empatadas = comparacao_arquiteturas[comparacao_arquiteturas["val_" + metrica_principal] >= melhor_f1 - tolerancia_desempate]
 arquitetura_escolhida = quase_empatadas.iloc[0]["arquitetura"] # a tabela está ordenada por parâmetros, então a primeira é a menor
 
 resultado_escolhido = resultados_arquiteturas[arquitetura_escolhida]
 mlp = resultado_escolhido["modelo"]  # a rede que segue para a avaliação no teste (passo 7)
 tempo_treino_mlp = resultado_escolhido["tempo"]
-print(f"\nArquitetura escolhida: {arquitetura_escolhida} (melhor F1 macro na validação: {melhor_f1:.3f}; tolerância de desempate: {tolerancia_desempate})")
+print(f"\nArquitetura escolhida: {arquitetura_escolhida} (melhor {titulo_metrica_principal} na validação: {melhor_f1:.3f}; tolerância de desempate: {tolerancia_desempate})")
 
 
 # ===============================================================
@@ -345,15 +395,16 @@ print(f"\nArquitetura escolhida: {arquitetura_escolhida} (melhor F1 macro na val
 # a partir daqui nada mais é ajustado: o teste só MEDE o desempenho em dados que a rede nunca viu
 # se mudássemos a rede depois de olhar o teste, ele viraria uma segunda validação e o resultado ficaria otimista
 y_previsto_teste = prever_classes(mlp, X_teste, numero_classes)
+probabilidade_teste_mlp = probabilidade_hotspot_mlp(mlp, X_teste) # usada no ROC-AUC e na curva ROC (None no multiclasse)
 
 # --- métricas gerais: MLP x linha de base ---
 resultados_teste = pd.DataFrame({
     "linha_de_base": resultados_linha_de_base["teste"], # calculada no passo 2
-    "mlp_" + arquitetura_escolhida: avaliar_multiclasse(y_teste, y_previsto_teste),
+    "mlp_" + arquitetura_escolhida: avaliar(y_teste, y_previsto_teste, probabilidade_teste_mlp),
 }).round(3)
 print("\nMétricas no TESTE:")
 print(resultados_teste.to_string())
-# a comparação principal é pelo F1 macro: a accuracy da linha de base já parece razoável sem ela aprender nada (passo 2)
+# a comparação principal é pela métrica principal (F1 macro / F1 do hotspot): a accuracy da linha de base já parece razoável sem ela aprender nada (passo 2)
 
 # --- métricas por classe ---
 # precision: das vezes que a rede disse "essa classe", quantas estavam certas
@@ -371,7 +422,7 @@ print(pd.DataFrame(matriz, index=["real_" + nome for nome in nomes_classes], col
 
 # gráfico com duas versões da matriz:
 # esquerda: quantidade de animais | direita: % de cada classe REAL (cada linha soma 100%; a diagonal é o recall de cada classe)
-# a versão em % é a mais justa para comparar classes de tamanhos diferentes (10 anfíbios x 300 aves)
+# a versão em % é a mais justa para comparar classes de tamanhos diferentes (10 anfíbios x 300 aves; no hotspot, 1 hotspot para cada 3 de baixo risco)
 figura, eixos = plt.subplots(1, 2, figsize=(14, 5.5))
 ConfusionMatrixDisplay.from_predictions(
     y_teste, y_previsto_teste, labels=list(range(numero_classes)), display_labels=nomes_classes,
@@ -425,30 +476,32 @@ for parametros in candidatos_rf:
     inicio = time.perf_counter()
     floresta.fit(X_treino, y_treino)
     tempo = time.perf_counter() - inicio
-    metricas_validacao = avaliar_multiclasse(y_validacao, floresta.predict(X_validacao))
+    metricas_validacao = avaliar(y_validacao, floresta.predict(X_validacao))
     modelos_rf.append((floresta, tempo))
     linhas_rf.append({
         "max_depth": "sem limite" if parametros["max_depth"] is None else parametros["max_depth"],
         "min_samples_leaf": parametros["min_samples_leaf"],
         "tempo_s": round(tempo, 2),
-        "treino_f1_macro": round(f1_score(y_treino, floresta.predict(X_treino), average="macro"), 3), # mostra o quanto ele decorou o treino
+        "treino_" + metrica_principal: round(avaliar(y_treino, floresta.predict(X_treino))[metrica_principal], 3), # mostra o quanto ele decorou o treino
         "val_accuracy": round(metricas_validacao["accuracy"], 3),
-        "val_f1_macro": round(metricas_validacao["f1_macro"], 3),
+        "val_" + metrica_principal: round(metricas_validacao[metrica_principal], 3),
     })
 
 comparacao_rf = pd.DataFrame(linhas_rf)
 print("\nRandom Forest - comparação dos parâmetros na validação:")
 print(comparacao_rf.to_string(index=False))
-# treino_f1_macro perto de 1 com val_f1_macro bem menor = a floresta decorou o treino (overfitting)
+# F1 no treino perto de 1 com F1 na validação bem menor = a floresta decorou o treino (overfitting)
 
-posicao_escolhida = int(comparacao_rf["val_f1_macro"].idxmax()) # idxmax devolve a linha com o maior F1 macro na validação
+posicao_escolhida = int(comparacao_rf["val_" + metrica_principal].idxmax()) # idxmax devolve a linha com a maior métrica principal na validação
 rf, tempo_treino_rf = modelos_rf[posicao_escolhida]
 parametros_rf_escolhidos = candidatos_rf[posicao_escolhida]
 print("\nParâmetros escolhidos para o Random Forest:", parametros_rf_escolhidos)
 
 # --- avaliação no teste (uma única vez, igual à MLP) ---
 y_previsto_teste_rf = rf.predict(X_teste) # o RF já devolve o código da classe, sem precisar converter probabilidades
-resultados_teste["random_forest"] = pd.Series(avaliar_multiclasse(y_teste, y_previsto_teste_rf)).round(3) # nova coluna na tabela do passo 7
+# probabilidade de hotspot no RF: a fração das árvores que votaram em hotspot (predict_proba, coluna 1 = classe hotspot)
+probabilidade_teste_rf = rf.predict_proba(X_teste)[:, 1] if numero_classes == 2 else None
+resultados_teste["random_forest"] = pd.Series(avaliar(y_teste, y_previsto_teste_rf, probabilidade_teste_rf)).round(3) # nova coluna na tabela do passo 7
 print("\nMétricas no TESTE (linha de base x MLP x Random Forest):")
 print(resultados_teste.to_string())
 
@@ -476,6 +529,30 @@ caminho_matriz_rf = os.path.join(pasta_graficos, f"matriz_confusao_rf_{nome_conj
 plt.savefig(caminho_matriz_rf, dpi=120)
 plt.close()
 print("Gráfico salvo:", caminho_matriz_rf)
+
+# --- curva ROC (só no hotspot): MLP x Random Forest no mesmo gráfico ---
+# o corte de 0,5 é só uma escolha; a curva mostra o que acontece com TODOS os cortes possíveis:
+#   eixo y = recall do hotspot (dos hotspots reais, quantos o modelo encontrou)
+#   eixo x = taxa de falso positivo (dos segmentos de baixo risco, quantos o modelo marcou como hotspot por engano)
+# quanto mais a curva "sobe para o canto de cima à esquerda", melhor; a área embaixo dela é o ROC-AUC
+# a diagonal tracejada é um modelo que sorteia (ROC-AUC = 0,5), que é o caso da linha de base
+if numero_classes == 2:
+    figura, eixo = plt.subplots(figsize=(6.5, 6))
+    for nome_modelo, probabilidade, cor in [(f"MLP {arquitetura_escolhida}", probabilidade_teste_mlp, "steelblue"),
+                                            ("Random Forest", probabilidade_teste_rf, "seagreen")]:
+        taxa_falso_positivo, taxa_verdadeiro_positivo, _ = roc_curve(y_teste, probabilidade) # um ponto para cada corte possível; o 3º valor (os cortes) não é usado
+        area = roc_auc_score(y_teste, probabilidade)
+        eixo.plot(taxa_falso_positivo, taxa_verdadeiro_positivo, color=cor, label=f"{nome_modelo} (AUC = {area:.2f})")
+    eixo.plot([0, 1], [0, 1], color="gray", linestyle="--", label="sorteio (AUC = 0.50)")
+    eixo.set_xlabel("Taxa de falso positivo (baixo risco marcado como hotspot)")
+    eixo.set_ylabel("Recall do hotspot (taxa de verdadeiro positivo)")
+    eixo.set_title(f"Curva ROC no teste - {nome_conjunto}")
+    eixo.legend(loc="lower right")
+    plt.tight_layout()
+    caminho_roc = os.path.join(pasta_graficos, f"curva_roc_{nome_conjunto}.png")
+    plt.savefig(caminho_roc, dpi=120)
+    plt.close()
+    print("Gráfico salvo:", caminho_roc)
 
 # --- importância dos atributos (a vantagem de interpretação do RF) ---
 # mede o quanto cada atributo ajudou as árvores a separar as classes; a soma de todos dá 1
@@ -525,12 +602,12 @@ X_treino, X_validacao = X_treino_sem, X_validacao_sem
 print(f"\nTreinando a MLP {arquitetura_escolhida} SEM padronização...")
 resultado_mlp_sem = treinar_mlp(resultado_escolhido["neuronios"])
 X_treino, X_validacao = X_treino_padronizado, X_validacao_padronizado # volta aos dados padronizados
-f1_mlp_sem = f1_score(y_teste, prever_classes(resultado_mlp_sem["modelo"], X_teste_sem, numero_classes), average="macro", zero_division=0)
+f1_mlp_sem = avaliar(y_teste, prever_classes(resultado_mlp_sem["modelo"], X_teste_sem, numero_classes))[metrica_principal]
 
 # Random Forest sem padronização: mesmos parâmetros escolhidos no passo 8
 rf_sem = RandomForestClassifier(n_estimators=300, class_weight="balanced", random_state=semente, n_jobs=-1, **parametros_rf_escolhidos)
 rf_sem.fit(X_treino_sem, y_treino)
-f1_rf_sem = f1_score(y_teste, rf_sem.predict(X_teste_sem), average="macro", zero_division=0)
+f1_rf_sem = avaliar(y_teste, rf_sem.predict(X_teste_sem))[metrica_principal]
 # esperado: o RF dá praticamente o mesmo resultado (as árvores só comparam valores, a escala não importa)
 # e a MLP piora bastante (x e y na casa das centenas de milhares dominam as contas e atrapalham o ajuste dos pesos)
 
@@ -543,26 +620,27 @@ rf.predict(X_teste)
 tempo_previsao_rf = time.perf_counter() - inicio
 
 # --- tabela final ---
-# f1_macro_treino x f1_macro_teste: quanto maior a diferença, mais o modelo decorou o treino (pior generalização)
+# métrica no treino x no teste: quanto maior a diferença, mais o modelo decorou o treino (pior generalização)
+# os nomes das linhas seguem a métrica principal: f1_macro_* no multiclasse e f1_* no hotspot
+def linha_final(coluna_modelo, y_previsto_treino, f1_sem_padronizacao, tempo_treino, tempo_previsao):
+    linha = {
+        "accuracy_teste": resultados_teste.loc["accuracy", coluna_modelo],
+        metrica_principal + "_teste": resultados_teste.loc[metrica_principal, coluna_modelo],
+        metrica_principal + "_treino": avaliar(y_treino, y_previsto_treino)[metrica_principal],
+        metrica_principal + "_teste_sem_padronizacao": f1_sem_padronizacao,
+        "tempo_treino_s": tempo_treino,
+        "tempo_previsao_teste_ms": tempo_previsao * 1000,
+    }
+    if numero_classes == 2:
+        linha["roc_auc_teste"] = resultados_teste.loc["roc_auc", coluna_modelo]
+    return linha
+
 comparacao_final = pd.DataFrame({
-    "mlp_" + arquitetura_escolhida: {
-        "accuracy_teste": resultados_teste.loc["accuracy", "mlp_" + arquitetura_escolhida],
-        "f1_macro_teste": resultados_teste.loc["f1_macro", "mlp_" + arquitetura_escolhida],
-        "f1_macro_treino": f1_score(y_treino, prever_classes(mlp, X_treino, numero_classes), average="macro"),
-        "f1_macro_teste_sem_padronizacao": f1_mlp_sem,
-        "tempo_treino_s": tempo_treino_mlp,
-        "tempo_previsao_teste_ms": tempo_previsao_mlp * 1000,
-    },
-    "random_forest": {
-        "accuracy_teste": resultados_teste.loc["accuracy", "random_forest"],
-        "f1_macro_teste": resultados_teste.loc["f1_macro", "random_forest"],
-        "f1_macro_treino": f1_score(y_treino, rf.predict(X_treino), average="macro"),
-        "f1_macro_teste_sem_padronizacao": f1_rf_sem,
-        "tempo_treino_s": tempo_treino_rf,
-        "tempo_previsao_teste_ms": tempo_previsao_rf * 1000,
-    },
+    "mlp_" + arquitetura_escolhida: linha_final("mlp_" + arquitetura_escolhida, prever_classes(mlp, X_treino, numero_classes),
+                                                f1_mlp_sem, tempo_treino_mlp, tempo_previsao_mlp),
+    "random_forest": linha_final("random_forest", rf.predict(X_treino), f1_rf_sem, tempo_treino_rf, tempo_previsao_rf),
 }).round(3)
-comparacao_final.loc["diferenca_treino_teste"] = (comparacao_final.loc["f1_macro_treino"] - comparacao_final.loc["f1_macro_teste"]).round(3)
+comparacao_final.loc["diferenca_treino_teste"] = (comparacao_final.loc[metrica_principal + "_treino"] - comparacao_final.loc[metrica_principal + "_teste"]).round(3)
 
 print(f"\nComparação final MLP x Random Forest ({nome_conjunto}):")
 print(comparacao_final.to_string())
