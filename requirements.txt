@@ -1,6 +1,18 @@
+# Bibliotecas necessárias para rodar todas as etapas
+# instalar com: pip install -r requirements.txt
+
+# dados e gráficos
 pandas>=2.0
 numpy>=1.24
 matplotlib>=3.7
 seaborn>=0.12
 scipy>=1.10
-openpyxl>=3.1
+openpyxl>=3.1          # leitura do data/rodofauna.xlsx (etapa 1)
+
+# aprendizado de máquina
+scikit-learn>=1.2      # Random Forest, regressão linear, pré-processamento e métricas (1.2+ por causa do sparse_output do OneHotEncoder)
+joblib>=1.2            # salva e carrega os conjuntos prontos da etapa 2 (.joblib)
+tensorflow>=2.13       # MLP com Keras (2.13+ por causa do keras.metrics.F1Score)
+
+# otimização de hiperparâmetros
+optuna>=3.0            # etapa 5

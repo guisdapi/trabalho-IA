@@ -53,12 +53,14 @@ semente = 42  # a mesma da etapa 2: fixa os sorteios (pesos iniciais da rede, or
 # hiperparâmetros da MLP: o mesmo ponto de partida do multiclasse (a otimização com Optuna fica para a etapa 5)
 neuronios_camadas_ocultas = [32, 16]  # 2 camadas ocultas, com 32 e 16 neurônios; cada número da lista é uma camada
 arquiteturas_candidatas = [[16, 8], [32, 16], [64, 32]]  # passo 6: rede menor, a inicial e uma maior, comparadas na validação
-tolerancia_desempate = 0.01          # passo 6: se outra rede ficar a menos de 0,01 do melhor F1, preferimos a que tem menos parâmetros
+tolerancia_desempate = 0.01          # passo 6: se outra rede ficar a menos de 0,01 do melhor ROC-AUC, preferimos a que tem menos parâmetros
 taxa_aprendizado = 0.001              # tamanho do passo de cada ajuste dos pesos (valor padrão do Adam)
 tamanho_batch = 32                    # quantas linhas a rede vê antes de cada ajuste dos pesos (usado no treino, passo 5)
-epocas_maximas = 300                  # limite de épocas; na prática o treino para antes, pela parada antecipada (passo 5)
+epocas_maximas = 1000                 # limite de épocas; na prática o treino para antes, pela parada antecipada (passo 5)
+                                      # era 300, mas na divisão aleatória as 3 redes chegavam ao limite ainda melhorando (não convergiam)
 paciencia = 20                        # quantas épocas seguidas sem melhora na validação a parada antecipada tolera antes de parar
-corte_hotspot = 0.5                   # probabilidade a partir da qual o segmento é classificado como hotspot
+corte_hotspot = 0.5                   # corte inicial; no fim do passo 6 ele é trocado pelo melhor corte encontrado na VALIDAÇÃO
+cortes_testados = np.arange(0.20, 0.81, 0.05)  # cortes testados na validação (de 0,05 em 0,05: a validação é pequena, não vale refinar mais)
 
 os.chdir(os.path.dirname(os.path.abspath(__file__))) # faz os caminhos relativos partirem da pasta do script, igual às etapas 1 e 2
 os.makedirs(pasta_graficos, exist_ok=True) # cria a pasta dos gráficos da etapa 3 se ela não existir
@@ -84,6 +86,14 @@ def avaliar(y_real, y_previsto, probabilidade_hotspot=None):
     if probabilidade_hotspot is not None:
         metricas["roc_auc"] = roc_auc_score(y_real, probabilidade_hotspot)
     return metricas
+
+
+def escolher_corte(y_real, probabilidade_hotspot):
+    # cada ponto da curva ROC é um corte diferente; o 0,5 é só um deles e nada garante que seja o melhor
+    # aqui testamos vários cortes e ficamos com o que dá o maior F1 da classe hotspot
+    # IMPORTANTE: só é chamada com a VALIDAÇÃO; o teste nunca participa da escolha do corte
+    f1_de_cada_corte = [f1_score(y_real, (probabilidade_hotspot >= corte).astype(int), zero_division=0) for corte in cortes_testados]
+    return float(round(cortes_testados[int(np.argmax(f1_de_cada_corte))], 2)) # argmax: posição do maior F1 (em empate, o menor corte)
 
 
 def montar_mlp(numero_entradas, neuronios_camadas):
@@ -352,25 +362,36 @@ for arquitetura, resultado in resultados_arquiteturas.items():
         "val_loss": round(min(resultado["curvas"]["val_loss"]), 3),
         "val_accuracy": round(metricas_validacao["accuracy"], 3),
         "val_f1": round(metricas_validacao["f1"], 3),
-        "val_roc_auc": round(metricas_validacao["roc_auc"], 3), # só informativo; a escolha é pelo F1
+        "val_roc_auc": round(metricas_validacao["roc_auc"], 3), # critério de escolha da arquitetura
     })
 comparacao_arquiteturas = pd.DataFrame(linhas_comparacao).sort_values("parametros") # da menor para a maior rede
 print("\nComparação das arquiteturas na validação:")
 print(comparacao_arquiteturas.to_string(index=False))
 
-# regra de escolha: maior F1 da classe hotspot na validação
-# (o objetivo é encontrar os segmentos de risco; acertar os de baixo risco é fácil, porque são 3/4 da base)
-# desempate: se uma rede menor ficar a menos de "tolerancia_desempate" do melhor F1, ela é escolhida
+# regra de escolha: maior ROC-AUC na validação
+# por que não o F1: com o corte fixo de 0,5 e só ~11 hotspots na validação, o F1 anda "em degraus" e empata fácil
+# (na divisão aleatória as 3 redes deram exatamente o mesmo F1, e a escolha caía só no desempate)
+# o ROC-AUC olha a probabilidade inteira (e não só o "sim/não" do corte): mede se a rede ORDENA bem os segmentos por risco
+# desempate: se uma rede menor ficar a menos de "tolerancia_desempate" do melhor ROC-AUC, ela é escolhida
 # (diferença tão pequena pode ser só sorte do sorteio; com desempenho igual, a rede mais simples é preferível e decora menos)
-melhor_f1 = comparacao_arquiteturas["val_f1"].max()
-quase_empatadas = comparacao_arquiteturas[comparacao_arquiteturas["val_f1"] >= melhor_f1 - tolerancia_desempate]
+melhor_auc = comparacao_arquiteturas["val_roc_auc"].max()
+quase_empatadas = comparacao_arquiteturas[comparacao_arquiteturas["val_roc_auc"] >= melhor_auc - tolerancia_desempate]
 arquitetura_escolhida = quase_empatadas.iloc[0]["arquitetura"] # a tabela está ordenada por parâmetros, então a primeira é a menor
 
 resultado_escolhido = resultados_arquiteturas[arquitetura_escolhida]
 mlp = resultado_escolhido["modelo"]  # a rede que segue para a avaliação no teste (passo 7)
 tempo_treino_mlp = resultado_escolhido["tempo"]
 coluna_mlp = "mlp_" + arquitetura_escolhida
-print(f"\nArquitetura escolhida: {arquitetura_escolhida} (melhor F1 da classe hotspot na validação: {melhor_f1:.3f}; tolerância de desempate: {tolerancia_desempate})")
+print(f"\nArquitetura escolhida: {arquitetura_escolhida} (melhor ROC-AUC na validação: {melhor_auc:.3f}; tolerância de desempate: {tolerancia_desempate})")
+
+# --- corte de decisão ---
+# escolhida a rede (que ordena bem), falta decidir a partir de qual probabilidade o segmento vira "hotspot"
+# o corte é escolhido na VALIDAÇÃO, e o passo 7 só aplica esse corte no teste
+# a partir daqui, prever_classes e o passo 7 passam a usar este corte no lugar do 0,5
+corte_hotspot = escolher_corte(y_validacao, prever_probabilidade(mlp, X_validacao))
+f1_validacao_corte_05 = f1_score(y_validacao, (prever_probabilidade(mlp, X_validacao) >= 0.5).astype(int), zero_division=0)
+f1_validacao_corte_novo = f1_score(y_validacao, prever_classes(mlp, X_validacao), zero_division=0)
+print(f"Corte da MLP escolhido na validação: {corte_hotspot:.2f} (F1 na validação: {f1_validacao_corte_05:.3f} com 0,5 -> {f1_validacao_corte_novo:.3f} com {corte_hotspot:.2f})")
 
 
 # ===============================================================
@@ -439,7 +460,7 @@ for parametros in candidatos_rf:
     inicio = time.perf_counter()
     floresta.fit(X_treino, y_treino)
     tempo = time.perf_counter() - inicio
-    metricas_validacao = avaliar(y_validacao, floresta.predict(X_validacao))
+    metricas_validacao = avaliar(y_validacao, floresta.predict(X_validacao), floresta.predict_proba(X_validacao)[:, 1]) # a probabilidade é necessária para o ROC-AUC
     modelos_rf.append((floresta, tempo))
     linhas_rf.append({
         "max_depth": "sem limite" if parametros["max_depth"] is None else parametros["max_depth"],
@@ -447,7 +468,8 @@ for parametros in candidatos_rf:
         "tempo_s": round(tempo, 2),
         "treino_f1": round(avaliar(y_treino, floresta.predict(X_treino))["f1"], 3), # mostra o quanto ele decorou o treino
         "val_accuracy": round(metricas_validacao["accuracy"], 3),
-        "val_f1": round(metricas_validacao["f1"], 3),
+        "val_f1": round(metricas_validacao["f1"], 3), # com o corte de 0,5, só informativo
+        "val_roc_auc": round(metricas_validacao["roc_auc"], 3), # critério de escolha (o mesmo da MLP)
     })
 
 comparacao_rf = pd.DataFrame(linhas_rf)
@@ -455,13 +477,22 @@ print("\nRandom Forest - comparação dos parâmetros na validação:")
 print(comparacao_rf.to_string(index=False))
 # treino_f1 perto de 1 com val_f1 bem menor = a floresta decorou o treino (overfitting)
 
-posicao_escolhida = int(comparacao_rf["val_f1"].idxmax()) # idxmax devolve a linha com o maior F1 na validação
+posicao_escolhida = int(comparacao_rf["val_roc_auc"].idxmax()) # idxmax devolve a linha com o maior ROC-AUC na validação (em empate, a primeira)
 rf, tempo_treino_rf = modelos_rf[posicao_escolhida]
 parametros_rf_escolhidos = candidatos_rf[posicao_escolhida]
 print("\nParâmetros escolhidos para o Random Forest:", parametros_rf_escolhidos)
 
+# o RF também recebe o seu próprio corte, escolhido na validação (o rf.predict usaria 0,5 por dentro)
+# assim os dois modelos são comparados nas mesmas condições
+corte_rf = escolher_corte(y_validacao, rf.predict_proba(X_validacao)[:, 1])
+print(f"Corte do Random Forest escolhido na validação: {corte_rf:.2f}")
+
+def prever_classes_rf(floresta, X):
+    # hotspot (1) quando a fração de árvores que votaram em hotspot passa do corte escolhido na validação
+    return (floresta.predict_proba(X)[:, 1] >= corte_rf).astype(int)
+
 # --- avaliação no teste (uma única vez, igual à MLP) ---
-y_previsto_teste_rf = rf.predict(X_teste) # o RF já devolve o código da classe, sem precisar converter probabilidades
+y_previsto_teste_rf = prever_classes_rf(rf, X_teste) # usa o corte do RF escolhido na validação
 # probabilidade de hotspot no RF: a fração das árvores que votaram em hotspot (predict_proba, coluna 1 = classe hotspot)
 probabilidade_teste_rf = rf.predict_proba(X_teste)[:, 1]
 resultados_teste["random_forest"] = pd.Series(avaliar(y_teste, y_previsto_teste_rf, probabilidade_teste_rf)).round(3) # nova coluna na tabela do passo 7
@@ -546,7 +577,7 @@ f1_mlp_sem = avaliar(y_teste, prever_classes(mlp_sem, X_teste_sem))["f1"]
 # Random Forest sem padronização: mesmos parâmetros escolhidos no passo 8
 rf_sem = RandomForestClassifier(n_estimators=300, class_weight="balanced", random_state=semente, n_jobs=-1, **parametros_rf_escolhidos)
 rf_sem.fit(X_treino_sem, y_treino)
-f1_rf_sem = avaliar(y_teste, rf_sem.predict(X_teste_sem))["f1"]
+f1_rf_sem = avaliar(y_teste, prever_classes_rf(rf_sem, X_teste_sem))["f1"]
 # esperado: o RF dá praticamente o mesmo resultado (as árvores só comparam valores, a escala não importa)
 # e a MLP piora bastante (coordenadas na casa das centenas de milhares dominam as contas e atrapalham o ajuste dos pesos)
 
@@ -555,7 +586,7 @@ inicio = time.perf_counter()
 prever_classes(mlp, X_teste)
 tempo_previsao_mlp = time.perf_counter() - inicio
 inicio = time.perf_counter()
-rf.predict(X_teste)
+prever_classes_rf(rf, X_teste)
 tempo_previsao_rf = time.perf_counter() - inicio
 
 # --- tabela final ---
@@ -569,15 +600,17 @@ comparacao_final = pd.DataFrame({
         "tempo_treino_s": tempo_treino_mlp,
         "tempo_previsao_teste_ms": tempo_previsao_mlp * 1000,
         "roc_auc_teste": resultados_teste.loc["roc_auc", coluna_mlp],
+        "corte_decisao": corte_hotspot, # escolhido na validação
     },
     "random_forest": {
         "accuracy_teste": resultados_teste.loc["accuracy", "random_forest"],
         "f1_teste": resultados_teste.loc["f1", "random_forest"],
-        "f1_treino": avaliar(y_treino, rf.predict(X_treino))["f1"],
+        "f1_treino": avaliar(y_treino, prever_classes_rf(rf, X_treino))["f1"],
         "f1_teste_sem_padronizacao": f1_rf_sem,
         "tempo_treino_s": tempo_treino_rf,
         "tempo_previsao_teste_ms": tempo_previsao_rf * 1000,
         "roc_auc_teste": resultados_teste.loc["roc_auc", "random_forest"],
+        "corte_decisao": corte_rf, # escolhido na validação
     },
 }).round(3)
 comparacao_final.loc["diferenca_treino_teste"] = (comparacao_final.loc["f1_treino"] - comparacao_final.loc["f1_teste"]).round(3)
