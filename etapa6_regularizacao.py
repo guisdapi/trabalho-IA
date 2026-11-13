@@ -1,60 +1,39 @@
-# 6 etapa IA - Regularização e análise de overfitting da MLP (problema MULTICLASSE, divisão aleatória)
-#
-# ideia: pegar a melhor rede encontrada pelo Optuna (etapa 5) e treinar versões COM e SEM regularização,
-# para ver o efeito de cada técnica nas curvas de treino x validação e no desempenho em dados não vistos
-#
-# técnicas comparadas (o enunciado pede pelo menos uma):
-#   - Dropout e L2 (weight decay): já fazem parte da melhor configuração do Optuna
-#   - parada antecipada (early stopping)
-#   - redução da complexidade: uma rede grande (256-128) x a rede de 82 neurônios
-#
-# roda DEPOIS do etapa5_optuna.py (usa os melhores hiperparâmetros salvos em resultadosE5):
-#   python etapa6_regularizacao.py
-#   python etapa6_regularizacao.py 20     (teste rápido: só 20 épocas, para ver se tudo roda)
-
-# ===============================================================
-# IMPORTS
-# ===============================================================
 import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2" # esconde as mensagens internas do TensorFlow; precisa vir ANTES do import do tensorflow
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0" # resultados iguais em toda execução (com a mesma semente), igual às outras etapas
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-import sys   # lê o número de épocas opcional digitado no terminal
-import time  # cronometra o treino de cada configuração
+import sys
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import joblib  # abre o conjunto pronto salvo na etapa 2
+import joblib
 
 from tensorflow import keras
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import accuracy_score, f1_score
 
 
-# ===============================================================
-# CONFIGURAÇÕES
-# ===============================================================
-nome_conjunto = "multiclasse_aleatoria" # o mesmo conjunto otimizado na etapa 5
+nome_conjunto = "multiclasse_aleatoria"
 pasta_conjuntos = "data/etapa2"
 pasta_resultados_e5 = "resultadosE5"
 pasta_graficos = "graficosE6"
 pasta_resultados = "resultadosE6"
 
 semente = 42
-epocas_maximas = 300  # sem parada antecipada, a rede treina TODAS essas épocas (é isso que deixa o overfitting aparecer)
-paciencia = 20        # parada antecipada igual às etapas 3 a 5
-neuronios_rede_grande = [256, 128]  # rede bem maior que a de 82 neurônios, para testar a redução da complexidade
+epocas_maximas = 300
+paciencia = 20
+neuronios_rede_grande = [256, 128]
 
-os.chdir(os.path.dirname(os.path.abspath(__file__))) # faz os caminhos relativos partirem da pasta do script
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 os.makedirs(pasta_graficos, exist_ok=True)
 os.makedirs(pasta_resultados, exist_ok=True)
 
 
-# ===============================================================
-# FUNÇÕES
-# ===============================================================
+                                                                 
+         
+                                                                 
 def montar_mlp(neuronios_camadas, dropout, l2):
-    # a mesma montagem da etapa 5; dropout = 0 e l2 = 0 desligam a regularização
     modelo = keras.Sequential(name="mlp_regularizacao")
     modelo.add(keras.Input(shape=(numero_entradas,), name="entrada"))
     for numero_camada, neuronios in enumerate(neuronios_camadas, start=1):
@@ -77,21 +56,15 @@ def montar_mlp(neuronios_camadas, dropout, l2):
         optimizer=otimizador,
         loss="categorical_crossentropy",
         metrics=[keras.metrics.F1Score(average="macro", name="f1_macro")],
-        # "entropia": a mesma entropia cruzada da loss, mas SEM a penalidade do L2
-        # a loss de quem usa L2 inclui essa penalidade e fica "inflada"; para comparar as configurações entre si,
-        # os gráficos usam a entropia, que mede só o erro das previsões
-        # weighted_metrics: aplica os mesmos pesos das classes da loss (no treino e na validação), para as escalas baterem
         weighted_metrics=[keras.metrics.CategoricalCrossentropy(name="entropia")],
     )
     return modelo
 
 
 def treinar(configuracao):
-    keras.utils.set_random_seed(semente) # a mesma semente em todas: as diferenças vêm só da regularização
+    keras.utils.set_random_seed(semente)
     modelo = montar_mlp(configuracao["neuronios"], configuracao["dropout"], configuracao["l2"])
 
-    # parada antecipada só nas configurações que usam essa técnica
-    # sem ela, a rede treina todas as épocas e fica com os pesos da ÚLTIMA época (inclusive se já estiver decorando o treino)
     callbacks = []
     if configuracao["parada_antecipada"]:
         callbacks.append(keras.callbacks.EarlyStopping(monitor="val_loss", patience=paciencia, restore_best_weights=True))
@@ -113,7 +86,6 @@ def treinar(configuracao):
 
 
 def prever_classes(modelo, X):
-    # training=False: na previsão o dropout fica desligado (todos os neurônios participam)
     return np.asarray(modelo(X, training=False)).argmax(axis=1)
 
 
@@ -121,11 +93,8 @@ def f1_macro(y_real, y_previsto):
     return f1_score(y_real, y_previsto, average="macro", zero_division=0)
 
 
-# ===============================================================
-# PASSO 1: CARREGAR O CONJUNTO E OS MELHORES HIPERPARÂMETROS DA ETAPA 5
-# ===============================================================
 if len(sys.argv) > 1:
-    epocas_maximas = int(sys.argv[1]) # teste rápido: python etapa6_regularizacao.py 20
+    epocas_maximas = int(sys.argv[1])
 
 conjunto = joblib.load(os.path.join(pasta_conjuntos, nome_conjunto + ".joblib"))
 X_treino, X_validacao, X_teste = conjunto["X_treino"], conjunto["X_validacao"], conjunto["X_teste"]
@@ -139,7 +108,7 @@ print(f"Treino {X_treino.shape} | validação {X_validacao.shape} | teste {X_tes
 caminho_melhores = os.path.join(pasta_resultados_e5, f"melhores_hiperparametros_{nome_conjunto}.csv")
 if not os.path.exists(caminho_melhores):
     raise SystemExit("Faltam os resultados da etapa 5 -> rode antes: python etapa5_optuna.py aleatoria")
-valores = pd.read_csv(caminho_melhores, index_col=0)["valor"] # o CSV guarda tudo como texto; abaixo cada valor volta ao seu tipo
+valores = pd.read_csv(caminho_melhores, index_col=0)["valor"]
 melhores = {
     "camadas": int(valores["camadas"]),
     "neuronios_primeira_camada": int(valores["neuronios_primeira_camada"]),
@@ -150,7 +119,6 @@ melhores = {
     "dropout": float(valores["dropout"]),
     "l2": float(valores["l2"]),
 }
-# as camadas seguem a mesma pirâmide da etapa 5 (cada camada com metade dos neurônios da anterior)
 neuronios_otimizada = [max(melhores["neuronios_primeira_camada"] // (2 ** posicao), 4) for posicao in range(melhores["camadas"])]
 nome_otimizada = "-".join(str(neuronios) for neuronios in neuronios_otimizada)
 nome_grande = "-".join(str(neuronios) for neuronios in neuronios_rede_grande)
@@ -159,9 +127,6 @@ for nome, valor in melhores.items():
     print(f"  {nome}: {valor:.4g}" if isinstance(valor, float) else f"  {nome}: {valor}")
 
 
-# ===============================================================
-# PASSO 2: PESOS DAS CLASSES E DADOS PARA A REDE (IGUAL ÀS ETAPAS 3 E 5)
-# ===============================================================
 classes_do_treino = np.unique(y_treino)
 pesos = compute_class_weight(class_weight="balanced", classes=classes_do_treino, y=y_treino)
 pesos_classes = dict(zip(classes_do_treino.tolist(), pesos.tolist()))
@@ -170,15 +135,6 @@ y_treino_rede = keras.utils.to_categorical(y_treino, numero_classes)
 y_validacao_rede = keras.utils.to_categorical(y_validacao, numero_classes)
 
 
-# ===============================================================
-# PASSO 3: AS CONFIGURAÇÕES COMPARADAS
-# ===============================================================
-# todas usam a mesma ativação, otimizador, taxa de aprendizado e batch da etapa 5; só muda a regularização (e o tamanho, nas duas últimas)
-# 1 x 2: efeito da parada antecipada sozinha
-# 1 x 3: efeito do Dropout + L2 sozinhos
-# 4: a configuração completa encontrada pelo Optuna
-# 5 x 1: efeito da redução da complexidade (rede grande x rede de 82 neurônios, as duas sem regularização)
-# 5 x 6: a rede grande também pode ser "segurada" pela regularização?
 dropout_otimo, l2_otimo = melhores["dropout"], melhores["l2"]
 configuracoes = [
     {"nome": f"{nome_otimizada}_sem_regularizacao", "rotulo": f"{nome_otimizada}: sem regularização",
@@ -199,17 +155,6 @@ print(f"\nConfigurações comparadas (até {epocas_maximas} épocas; sem parada 
 print(pd.DataFrame(configuracoes)[["rotulo", "dropout", "l2", "parada_antecipada"]].round(5).to_string(index=False))
 
 
-# ===============================================================
-# PASSO 4: TREINAR CADA CONFIGURAÇÃO E MEDIR TREINO, VALIDAÇÃO E TESTE
-# ===============================================================
-# os F1 de treino, validação e teste são calculados DEPOIS do treino, com o dropout desligado,
-# para os três serem medidos nas mesmas condições
-# (durante o treino, a curva de treino é calculada com o dropout ligado e por isso parece pior que a de validação)
-#
-# indicadores de overfitting:
-#   diferenca_treino_validacao: quanto o F1 no treino passa o da validação (grande = a rede decorou o treino)
-#   subida_entropia_validacao: quanto o erro na validação subiu do seu ponto mais baixo até a última época
-#   (o erro da validação cai, chega a um mínimo e depois volta a subir enquanto o do treino continua caindo = overfitting)
 linhas = []
 curvas_por_configuracao = {}
 for configuracao in configuracoes:
@@ -242,7 +187,7 @@ for configuracao in configuracoes:
     linhas.append(linha)
     print(f"  {linha['epocas']} épocas em {tempo:.1f} s | F1 macro: treino {linha['f1_macro_treino']:.3f}, "
           f"validação {linha['f1_macro_validacao']:.3f}, teste {linha['f1_macro_teste']:.3f}")
-    keras.backend.clear_session() # libera a memória antes da próxima configuração
+    keras.backend.clear_session()
 
 comparacao = pd.DataFrame(linhas)
 colunas_principais = ["configuracao", "epocas", "f1_macro_treino", "f1_macro_validacao", "f1_macro_teste",
@@ -251,13 +196,7 @@ print("\nComparação das configurações:")
 print(comparacao[colunas_principais].round(3).to_string(index=False))
 
 
-# ===============================================================
-# PASSO 5: GRÁFICOS
-# ===============================================================
-# --- curvas de cada configuração: erro (entropia) e F1 macro, treino x validação ---
-# as 6 configurações lado a lado, com a mesma escala, para comparar o formato das curvas
 figura, eixos = plt.subplots(2, len(configuracoes), figsize=(4.2 * len(configuracoes), 8), sharey="row")
-# limites do eixo do erro calculados com TODAS as curvas, para nenhuma sair do gráfico (a 1ª época fica de fora, porque o erro começa muito alto)
 limite_superior_entropia = max(max(curvas["entropia"][1:] + curvas["val_entropia"][1:]) for curvas in curvas_por_configuracao.values())
 limite_inferior_entropia = min(min(curvas["entropia"] + curvas["val_entropia"]) for curvas in curvas_por_configuracao.values())
 for coluna, configuracao in enumerate(configuracoes):
@@ -284,8 +223,6 @@ plt.savefig(caminho_curvas, dpi=120, bbox_inches="tight")
 plt.close()
 print("\nGráfico salvo:", caminho_curvas)
 
-# --- F1 macro no treino, na validação e no teste de cada configuração ---
-# barras de treino bem mais altas que as de validação/teste = a rede decorou o treino
 grafico = comparacao.set_index("configuracao")[["f1_macro_treino", "f1_macro_validacao", "f1_macro_teste"]]
 grafico.columns = ["treino", "validação", "teste"]
 eixo = grafico.plot(kind="bar", figsize=(13, 5.5), color=["steelblue", "orange", "crimson"], width=0.8)
@@ -296,7 +233,7 @@ plt.ylabel("F1 macro (medido sem dropout)")
 plt.xlabel("")
 plt.xticks(rotation=15, ha="right")
 eixo.set_ylim(0, grafico.to_numpy().max() * 1.15)
-plt.legend(loc="upper left", bbox_to_anchor=(1.01, 1)) # legenda fora do gráfico, para não cobrir os números das barras
+plt.legend(loc="upper left", bbox_to_anchor=(1.01, 1))
 plt.tight_layout()
 caminho_barras = os.path.join(pasta_graficos, f"f1_treino_validacao_teste_{nome_conjunto}.png")
 plt.savefig(caminho_barras, dpi=120, bbox_inches="tight")
@@ -304,11 +241,6 @@ plt.close()
 print("Gráfico salvo:", caminho_barras)
 
 
-# ===============================================================
-# PASSO 6: RESUMO PARA AS PERGUNTAS DO ENUNCIADO
-# ===============================================================
-# a "melhor configuração" é escolhida pela VALIDAÇÃO (maior F1 macro), como nas outras etapas;
-# o teste é mostrado só para responder se houve melhora em dados não vistos
 sem_regularizacao = comparacao.iloc[0]
 rede_grande_sem = comparacao.iloc[4]
 melhor = comparacao.loc[comparacao["f1_macro_validacao"].idxmax()]
