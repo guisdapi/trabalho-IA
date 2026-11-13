@@ -55,10 +55,14 @@ python comparar_divisoes_regressao.py
 
 # Etapa 5 - otimização de hiperparâmetros da MLP com Optuna (multiclasse)
 python etapa5_optuna.py aleatoria
+
+# Etapa 6 - regularização e análise de overfitting (usa os melhores hiperparâmetros da etapa 5)
+python etapa6_regularizacao.py
 ```
 
 Para conferir se a etapa 5 roda antes da busca completa (50 trials, cerca de 30 a 50 minutos),
 dá para passar a quantidade de trials: `python etapa5_optuna.py aleatoria 3`.
+Da mesma forma, a etapa 6 aceita um número de épocas para teste: `python etapa6_regularizacao.py 15`.
 
 ## Estrutura
 
@@ -76,10 +80,11 @@ etapa3_binario.py           MLP x Random Forest no hotspot
 etapa3_multiclasse.py       MLP x Random Forest no multiclasse
 etapa4.py                   MLP x Regressão Linear x Random Forest na regressão
 etapa5_optuna.py            busca de hiperparâmetros da MLP do multiclasse com Optuna
+etapa6_regularizacao.py     MLP com e sem regularização (Dropout, L2, parada antecipada, redução da complexidade)
 comparar_divisoes.py        compara as divisões da etapa 3 (hotspot ou multiclasse)
 comparar_divisoes_regressao.py   compara as divisões da etapa 4
-graficosE1/ ... graficosE5/ gráficos de cada etapa
-resultadosE3/ ... resultadosE5/   tabelas de métricas (.csv) usadas no relatório
+graficosE1/ ... graficosE6/ gráficos de cada etapa
+resultadosE3/ ... resultadosE6/   tabelas de métricas (.csv) usadas no relatório
 ```
 
 ## Observações
