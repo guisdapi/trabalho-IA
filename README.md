@@ -52,7 +52,13 @@ python etapa4.py regressao_aleatoria
 python etapa4.py regressao_espacial
 python etapa4.py regressao_temporal
 python comparar_divisoes_regressao.py
+
+# Etapa 5 - otimização de hiperparâmetros da MLP com Optuna (multiclasse)
+python etapa5_optuna.py aleatoria
 ```
+
+Para conferir se a etapa 5 roda antes da busca completa (50 trials, cerca de 30 a 50 minutos),
+dá para passar a quantidade de trials: `python etapa5_optuna.py aleatoria 3`.
 
 ## Estrutura
 
@@ -69,10 +75,11 @@ etapa2_regressao.py         pré-processamento da regressão
 etapa3_binario.py           MLP x Random Forest no hotspot
 etapa3_multiclasse.py       MLP x Random Forest no multiclasse
 etapa4.py                   MLP x Regressão Linear x Random Forest na regressão
+etapa5_optuna.py            busca de hiperparâmetros da MLP do multiclasse com Optuna
 comparar_divisoes.py        compara as divisões da etapa 3 (hotspot ou multiclasse)
 comparar_divisoes_regressao.py   compara as divisões da etapa 4
-graficosE1/ ... graficosE4/ gráficos de cada etapa
-resultadosE3/, resultadosE4/     tabelas de métricas (.csv) usadas no relatório
+graficosE1/ ... graficosE5/ gráficos de cada etapa
+resultadosE3/ ... resultadosE5/   tabelas de métricas (.csv) usadas no relatório
 ```
 
 ## Observações
