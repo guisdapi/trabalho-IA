@@ -46,9 +46,10 @@ os.makedirs(pasta_graficos, exist_ok=True)
 os.makedirs(pasta_resultados, exist_ok=True)
 
 
-                                                                 
-         
-                                                                 
+
+
+
+# Calcula accuracy, precision, recall e F1 macro
 def avaliar(y_real, y_previsto):
     return {
         "accuracy": accuracy_score(y_real, y_previsto),
@@ -58,6 +59,7 @@ def avaliar(y_real, y_previsto):
     }
 
 
+# Monta a MLP com as camadas ocultas ReLU e a saída softmax com um neurônio por classe
 def montar_mlp(numero_entradas, neuronios_camadas):
     modelo = keras.Sequential(name="mlp")
     modelo.add(keras.Input(shape=(numero_entradas,), name="entrada"))
@@ -75,6 +77,7 @@ def montar_mlp(numero_entradas, neuronios_camadas):
     return modelo
 
 
+# Treina a MLP com pesos de classe e parada antecipada, guardando as curvas e o tempo
 def treinar_mlp(neuronios_camadas, X_treino_rede, X_validacao_rede):
     keras.utils.set_random_seed(semente)
     modelo = montar_mlp(X_treino_rede.shape[1], neuronios_camadas)
@@ -108,15 +111,18 @@ def treinar_mlp(neuronios_camadas, X_treino_rede, X_validacao_rede):
     }
 
 
+# Escolhe a classe com a maior probabilidade
 def prever_classes(modelo, X):
     probabilidades = np.asarray(modelo(X, training=False))
     return probabilidades.argmax(axis=1)
 
 
+# Gera o nome da arquitetura a partir dos neurônios das camadas (ex.: 32-16)
 def nome_arquitetura(neuronios_camadas):
     return "-".join(str(neuronios) for neuronios in neuronios_camadas)
 
 
+# Desenha as curvas de erro e de F1 no treino e na validação ao longo das épocas
 def desenhar_curvas(resultado):
     curvas, melhor_epoca = resultado["curvas"], resultado["melhor_epoca"]
     epocas = range(1, resultado["epocas_treinadas"] + 1)
@@ -137,6 +143,7 @@ def desenhar_curvas(resultado):
     print("Gráfico salvo:", caminho)
 
 
+# Desenha e salva a matriz de confusão do modelo
 def desenhar_matriz_confusao(y_previsto, nome_modelo, mapa_de_cores, nome_arquivo):
     figura, eixos = plt.subplots(1, 2, figsize=(14, 5.5))
     ConfusionMatrixDisplay.from_predictions(
@@ -341,6 +348,7 @@ print("Gráfico salvo:", caminho_importancia)
 padronizador = conjunto["preprocessador"].named_transformers_["numericas"]
 quantidade_numericas = len(padronizador.mean_)
 
+# Volta os atributos numéricos para a escala original, para testar os modelos sem padronização
 def desfazer_padronizacao(X):
     X_original = X.copy()
     X_original[:, :quantidade_numericas] = padronizador.inverse_transform(X[:, :quantidade_numericas])

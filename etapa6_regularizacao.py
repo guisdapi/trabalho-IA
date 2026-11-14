@@ -30,9 +30,10 @@ os.makedirs(pasta_graficos, exist_ok=True)
 os.makedirs(pasta_resultados, exist_ok=True)
 
 
-                                                                 
-         
-                                                                 
+
+
+
+# Monta a MLP com Dropout e L2 conforme a configuração
 def montar_mlp(neuronios_camadas, dropout, l2):
     modelo = keras.Sequential(name="mlp_regularizacao")
     modelo.add(keras.Input(shape=(numero_entradas,), name="entrada"))
@@ -61,6 +62,7 @@ def montar_mlp(neuronios_camadas, dropout, l2):
     return modelo
 
 
+# Treina uma configuração, com ou sem parada antecipada, e mede o F1 no treino, na validação e no teste
 def treinar(configuracao):
     keras.utils.set_random_seed(semente)
     modelo = montar_mlp(configuracao["neuronios"], configuracao["dropout"], configuracao["l2"])
@@ -85,10 +87,12 @@ def treinar(configuracao):
     return modelo, curvas, tempo
 
 
+# Escolhe a classe com a maior probabilidade
 def prever_classes(modelo, X):
     return np.asarray(modelo(X, training=False)).argmax(axis=1)
 
 
+# Calcula o F1 macro
 def f1_macro(y_real, y_previsto):
     return f1_score(y_real, y_previsto, average="macro", zero_division=0)
 

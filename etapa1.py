@@ -11,9 +11,10 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 os.makedirs("graficosE1", exist_ok=True)
 
 
-                                                                 
-         
-                                                                 
+
+
+
+# Descobre o trecho da rodovia a partir das coordenadas do registro
 def descobrir_trecho_pela_localizacao(linha):
     if linha["y"] < 8245000:
         return "jbb_fal_ibge"

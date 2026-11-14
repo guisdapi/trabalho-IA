@@ -49,9 +49,10 @@ os.makedirs(pasta_resultados, exist_ok=True)
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
-                                                                 
-         
-                                                                 
+
+
+
+# Calcula accuracy, precision, recall e F1 macro
 def avaliar(y_real, y_previsto):
     return {
         "accuracy": accuracy_score(y_real, y_previsto),
@@ -61,6 +62,7 @@ def avaliar(y_real, y_previsto):
     }
 
 
+# Sorteia os hiperparâmetros de uma tentativa do Optuna
 def sortear_hiperparametros(trial):
     return {
         "camadas": trial.suggest_int("camadas", camadas_min, camadas_max),
@@ -74,15 +76,18 @@ def sortear_hiperparametros(trial):
     }
 
 
+# Calcula os neurônios de cada camada, dividindo pela metade a cada nova camada
 def neuronios_das_camadas(hiperparametros):
     primeira = hiperparametros["neuronios_primeira_camada"]
     return [max(primeira // (2 ** posicao), 4) for posicao in range(hiperparametros["camadas"])]
 
 
+# Gera o nome da arquitetura a partir dos neurônios das camadas (ex.: 32-16)
 def nome_arquitetura(neuronios_camadas):
     return "-".join(str(neuronios) for neuronios in neuronios_camadas)
 
 
+# Cria o otimizador sorteado (Adam, RMSprop ou SGD) com a taxa de aprendizado
 def montar_otimizador(hiperparametros):
     taxa = hiperparametros["taxa_aprendizado"]
     if hiperparametros["otimizador"] == "adam":
@@ -92,6 +97,7 @@ def montar_otimizador(hiperparametros):
     return keras.optimizers.SGD(learning_rate=taxa, momentum=momentum_sgd)
 
 
+# Monta a MLP com os hiperparâmetros sorteados (camadas, ativação, Dropout e L2)
 def montar_mlp(hiperparametros):
     modelo = keras.Sequential(name="mlp_optuna")
     modelo.add(keras.Input(shape=(numero_entradas,), name="entrada"))
@@ -111,6 +117,7 @@ def montar_mlp(hiperparametros):
     return modelo
 
 
+# Treina a MLP com os hiperparâmetros e parada antecipada, guardando as curvas e o tempo
 def treinar_mlp(hiperparametros):
     keras.utils.set_random_seed(semente)
     modelo = montar_mlp(hiperparametros)
@@ -137,10 +144,12 @@ def treinar_mlp(hiperparametros):
     }
 
 
+# Escolhe a classe com a maior probabilidade
 def prever_classes(modelo, X):
     return np.asarray(modelo(X, training=False)).argmax(axis=1)
 
 
+# Função que o Optuna otimiza: treina a rede e devolve o F1 macro na validação
 def objetivo(trial):
     hiperparametros = sortear_hiperparametros(trial)
     resultado = treinar_mlp(hiperparametros)
@@ -156,12 +165,14 @@ def objetivo(trial):
     return f1_validacao
 
 
+# Mostra no terminal o resultado de cada tentativa e o melhor até agora
 def mostrar_progresso(estudo, trial):
     print(f"  trial {trial.number + 1:>3}/{numero_trials}: F1 macro val = {trial.value:.3f}"
           f" | melhor até agora = {estudo.best_value:.3f}"
           f" | rede {trial.user_attrs['arquitetura']}, {trial.params['otimizador']}, {trial.user_attrs['tempo_s']} s")
 
 
+# Desenha as curvas de erro e de F1 macro no treino e na validação ao longo das épocas
 def desenhar_curvas(resultado, titulo, caminho):
     curvas, melhor_epoca = resultado["curvas"], resultado["melhor_epoca"]
     epocas = range(1, resultado["epocas_treinadas"] + 1)

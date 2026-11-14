@@ -26,9 +26,10 @@ os.makedirs(pasta_graficos, exist_ok=True)
 os.makedirs(pasta_saida, exist_ok=True)
 
 
-                                                                 
-         
-                                                                 
+
+
+
+# Divide os dados aleatoriamente em treino, validação e teste
 def dividir_aleatorio(tabela_problema):
     indices = np.arange(len(tabela_problema))
     indices_resto, indices_teste = train_test_split(indices, test_size=proporcao_teste, random_state=semente)
@@ -43,6 +44,7 @@ def dividir_aleatorio(tabela_problema):
     return particao
 
 
+# Divide os dados pelo tempo: primeiros períodos no treino, o seguinte na validação e o último no teste
 def dividir_temporal(tabela_problema):
     return np.select(
         [tabela_problema["periodo_monitoramento"].isin(periodos_treino),
@@ -53,6 +55,7 @@ def dividir_temporal(tabela_problema):
     )
 
 
+# Mostra quantas linhas ficaram em cada parte, a média do alvo e a porcentagem de zeros
 def resumir_divisao(tabela_problema, coluna_particao, coluna_alvo):
     print(f"\n  {coluna_particao}:")
     quantidade = tabela_problema[coluna_particao].value_counts().reindex(["treino", "validacao", "teste"])
@@ -62,6 +65,7 @@ def resumir_divisao(tabela_problema, coluna_particao, coluna_alvo):
     print(resumo.to_string())
 
 
+# Calcula a distância de cada ponto do teste até o ponto de treino mais próximo
 def distancias_teste_ao_treino(tabela_problema, coluna_particao, coluna_x, coluna_y):
     pontos_treino = tabela_problema[tabela_problema[coluna_particao] == "treino"][[coluna_x, coluna_y]].to_numpy()
     pontos_teste = tabela_problema[tabela_problema[coluna_particao] == "teste"][[coluna_x, coluna_y]].to_numpy()
@@ -70,6 +74,7 @@ def distancias_teste_ao_treino(tabela_problema, coluna_particao, coluna_x, colun
     return distancias
 
 
+# Mostra o quanto o teste fica perto do treino em cada divisão (vazamento espacial)
 def resumir_vazamento(tabela_problema, colunas_particao, coluna_x, coluna_y):
     linhas_resumo = []
     for coluna_particao in colunas_particao:
@@ -83,6 +88,7 @@ def resumir_vazamento(tabela_problema, colunas_particao, coluna_x, coluna_y):
     print(pd.DataFrame(linhas_resumo).to_string(index=False))
 
 
+# Monta o pré-processamento: padroniza as numéricas, aplica one-hot nas categóricas e mantém as binárias
 def montar_preprocessador(colunas_numericas, colunas_categoricas, colunas_binarias):
     return ColumnTransformer([
         ("numericas", StandardScaler(), colunas_numericas),
@@ -91,6 +97,7 @@ def montar_preprocessador(colunas_numericas, colunas_categoricas, colunas_binari
     ])
 
 
+# Ajusta o pré-processamento só no treino, transforma as três partes e salva o conjunto da divisão
 def preparar_e_salvar(tabela_problema, nome_problema, coluna_particao, coluna_alvo, colunas_numericas, colunas_categoricas, colunas_binarias, classes=None):
     colunas_entrada = colunas_numericas + colunas_categoricas + colunas_binarias
     preprocessador = montar_preprocessador(colunas_numericas, colunas_categoricas, colunas_binarias)
